@@ -50,3 +50,44 @@ ior:
         a: 16
     objectclass:
         o: "LARGE"
+deviation_percentage:
+    percent: 5
+comp_value:
+    testID_01:
+        write: 3700
+        read: 4700
+    testID_02:
+        write: 3900
+        read: 5500
+    testID_03:
+        write: 3700
+        read: 5000
+    testID_04:
+        write: 3800
+        read: 5500
+    testID_05:
+        write: 3600
+        read: 5000
+    testID_06:
+        write: 3700
+        read: 5500
+    testID_07:
+        write: 2600
+        read: 5300
+    testID_08:
+        write: 3600
+        read: 5000
+    testID_09:
+        write: 2800
+        read: 5300
+    testID_10:
+        write: 3700
+        read: 5000
+    testID_11:
+        write: 2900
+        read: 5300
+    testID_12:
+        write: 3700
+        read: 5000
+
+

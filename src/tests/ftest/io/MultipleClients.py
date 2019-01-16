@@ -25,6 +25,7 @@
 import os
 import sys
 import json
+import itertools
 from avocado       import Test
 
 sys.path.append('./util')
@@ -47,7 +48,7 @@ class MultipleClients(Test):
             build_paths = json.load(f)
         self.basepath = os.path.normpath(build_paths['PREFIX']  + "/../")
 
-        self.server_group = self.params.get("server_group", '/server/','daos_server')
+        self.server_group = self.params.get("server_group", '/server/', 'daos_server')
         self.daosctl = self.basepath + '/install/bin/daosctl'
 
         # setup the DAOS python API
@@ -69,10 +70,6 @@ class MultipleClients(Test):
 
     def tearDown(self):
         try:
-            if self.hostfile_clients is not None:
-                os.remove(self.hostfile_clients)
-            if self.hostfile_servers is not None:
-                os.remove(self.hostfile_servers)
             if self.pool is not None and self.pool.attached:
                 self.pool.destroy(1)
         finally:
@@ -104,16 +101,23 @@ class MultipleClients(Test):
         async_io = self.params.get("a", '/run/ior/asyncio/')
         object_class = self.params.get("o", '/run/ior/objectclass/')
 
+        test_id = "testID_" + (str(self.name).split("-")[0])
+        comp_value_write = int(self.params.get("write", '/run/comp_value/{}/*'.format(test_id)))
+        comp_value_read = int(self.params.get("read", '/run/comp_value/{}/*'.format(test_id)))
+        deviation = self.params.get("percent", '/run/deviation_percentage/')
+        deviation_percentage = float(deviation)/100
+
+        expected_result = 'PASS'
+
         try:
             # initialize a python pool object then create the underlying
             # daos storage
             self.pool = DaosPool(self.Context)
             self.pool.create(createmode, createuid, creategid,
-                    createsize, createsetid, None, None, createsvc)
-
+                             createsize, createsetid, None, None, createsvc)
 
             with open(self.hostfile_clients) as f:
-                newText=f.read().replace('slots=1', 'slots={0}').format(slots)
+                newText = f.read().replace('slots=1', 'slots={0}').format(slots)
 
             with open(self.hostfile_clients, "w") as f:
                 f.write(newText)
@@ -138,5 +142,77 @@ class MultipleClients(Test):
                              pool_uuid, svc_list, record_size, stripe_size, stripe_count,
                              async_io, object_class, self.basepath, slots)
 
-        except (DaosApiError, IorUtils.IorFailed) as e:
-            self.fail("<MultipleClients Test run Failed>\n {}".format(e))
+            stdout = self.logdir + "/stdout"
+            searchfile = open(stdout, "r")
+            data = []
+
+            for num, line in enumerate(searchfile, 1):
+                if line.startswith("Summary of all tests:"):
+                    if line not in data:
+                        data.append(line.strip())
+                    for i in range(num, num+4):
+                        line = (next(itertools.islice(searchfile, i))).strip()
+                        data.append(line)
+
+            mean_write_bandwidth = int(float(data[2].split()[3]))
+            mean_read_bandwidth = int(float(data[3].split()[3]))
+
+            low_range_value_write = int(comp_value_write - \
+                                       (comp_value_write * deviation_percentage))
+            upper_range_value_write = int(comp_value_write + \
+                                         (comp_value_write * deviation_percentage))
+            low_range_value_read = int(comp_value_read - \
+                                      (comp_value_read * deviation_percentage))
+            upper_range_value_read = int(comp_value_read + \
+                                        (comp_value_read * deviation_percentage))
+
+            if mean_write_bandwidth < low_range_value_write or \
+               mean_read_bandwidth < low_range_value_read:
+                if mean_write_bandwidth < low_range_value_write and \
+                   mean_read_bandwidth < low_range_value_read:
+                    bandwidth_diff_write = comp_value_write - mean_write_bandwidth
+                    bandwidth_diff_read = comp_value_read - mean_read_bandwidth
+                    self.fail("Mean Bandwidth for both read and write is below +/-{}% \
+                              range of Base Comparison Value\n".format(deviation) + \
+                              "Mean write Bandwidth, {}% less than base value\n"\
+                              .format(((float(bandwidth_diff_write)/float(comp_value_write)) * 100)) + \
+                              "Mean read Bandwidth, {}% less than base value\n"\
+                              .format(((float(bandwidth_diff_read)/float(comp_value_read)) * 100)))
+                elif mean_write_bandwidth < low_range_value_write:
+                    bandwidth_diff = comp_value_write - mean_write_bandwidth
+                    self.fail("Mean write Bandwidth, {}% less than base value".\
+                              format(((float(bandwidth_diff)/float(comp_value_write)) * 100)))
+                else:
+                    bandwidth_diff = comp_value_read - mean_read_bandwidth
+                    self.fail("Mean read Bandwidth, {}% less than base value".\
+                              format(((float(bandwidth_diff)/float(comp_value_read)) * 100)))
+
+            if mean_write_bandwidth in range(low_range_value_write, upper_range_value_write) \
+               and mean_read_bandwidth in range(low_range_value_read, upper_range_value_read):
+                expected_result = 'PASS'
+            if mean_write_bandwidth > upper_range_value_write or \
+               mean_read_bandwidth > upper_range_value_read:
+                expected_result = 'PASS'
+                if mean_write_bandwidth > upper_range_value_write and \
+                   mean_read_bandwidth > upper_range_value_read:
+                    bandwidth_diff_write = mean_write_bandwidth - comp_value_write
+                    bandwidth_diff_read = mean_read_bandwidth - comp_value_read
+                    print ("Mean write Bandwidth, {}% more than base value".\
+                           format(((float(bandwidth_diff_write)/float(comp_value_write)) * 100)))
+                    print ("Mean read Bandwidth, {}% more than base value".\
+                           format(((float(bandwidth_diff_read)/float(comp_value_read)) * 100)))
+                elif mean_write_bandwidth > upper_range_value_write:
+                    bandwidth_diff = mean_write_bandwidth - comp_value_write
+                    print ("Mean write Bandwidth, {}% more than base value".\
+                           format(((float(bandwidth_diff)/float(comp_value_write)) * 100)))
+                else:
+                    bandwidth_diff = mean_read_bandwidth - comp_value_read
+                    print ("Mean read Bandwidth, {}% more than base value".\
+                           format(((float(bandwidth_diff)/float(comp_value_read)) * 100)))
+
+            if expected_result == 'FAIL':
+                self.fail("Test was expected to fail but it passed.\n")
+        except (DaosApiError, StopIteration, IorUtils.IorFailed) as e:
+            print e
+            if expected_result != 'FAIL':
+                self.fail("Test was expected to pass but it failed.\n")

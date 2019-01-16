@@ -6,19 +6,32 @@ hosts:
             single_client:
                 clients:
                     - boro-B
+                comp_value:
+                    write: 1650
+                    read: 1000
+                    write: 700
+                    read: 420
             two_clients:
                 clients:
                     - boro-B
                     - boro-C
+                comp_value: 
+                     write: 1880
+                     read: 1580
             four_clients:
                 clients:
                     - boro-B
                     - boro-C
                     - boro-D
                     - boro-E
+                comp_value:
+                     write: 1950
+                     read: 1850
 timeout: 540
+deviation_percentage:
+    percent: 5
 server:
-    server_group: daos_server
+    name: daos_server
 createtests:
     createmode:
         mode_RW:

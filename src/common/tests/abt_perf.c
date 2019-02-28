@@ -30,14 +30,17 @@ static unsigned long	abt_cntr;
 static unsigned long	abt_created;
 static bool		abt_waiting;
 static bool		abt_exiting;
+static bool		abt_in_ult;
 
 static ABT_pool		abt_pool;
 static ABT_cond		abt_cond;
 static ABT_mutex	abt_lock;
 static ABT_xstream	abt_xstream;
+static char		*abt_name;
 
 static int		opt_secs;
-static int		opt_threads;
+static int		opt_threads = 1;
+static int		cr_opc;
 
 static void
 abt_thread_1(void *arg)
@@ -54,7 +57,7 @@ abt_thread_1(void *arg)
  * than @opt_threads.
  */
 static void
-abt_create_rate(void)
+abt_ult_create_rate(void)
 {
 	double		then;
 	double		now;
@@ -163,6 +166,65 @@ abt_sched_rate(void)
 	printf("ABT scheduling rate = %lu/sec.\n", abt_cntr / opt_secs);
 }
 
+enum {
+	CR_MUTEX,
+	CR_COND,
+	CR_EVENTUAL,
+};
+
+static void
+abt_lock_create_rate(void *arg)
+{
+	ABT_mutex	mutex;
+	ABT_cond	cond;
+	ABT_eventual	eventual;
+	double		then;
+	double		now;
+	int		rc;
+
+	then = ABT_get_wtime();
+	while (1) {
+		if (!abt_exiting) {
+			now = ABT_get_wtime();
+			if (now - then >= opt_secs)
+				abt_exiting = true;
+		}
+
+		if (abt_exiting)
+			break;
+
+		switch (cr_opc) {
+		case CR_MUTEX:
+			rc = ABT_mutex_create(&mutex);
+			assert(rc == ABT_SUCCESS);
+			ABT_mutex_free(&mutex);
+			break;
+
+		case CR_COND:
+			rc = ABT_cond_create(&cond);
+			assert(rc == ABT_SUCCESS);
+			ABT_cond_free(&cond);
+			break;
+
+		case CR_EVENTUAL:
+			rc = ABT_eventual_create(sizeof(int), &eventual);
+			assert(rc == ABT_SUCCESS);
+			ABT_eventual_free(&eventual);
+			break;
+		}
+		abt_cntr++;
+	}
+	printf("ABT %s creation rate = %lu/sec.\n",
+		abt_name, abt_cntr / opt_secs);
+
+	ABT_mutex_lock(abt_lock);
+	if (abt_waiting) {
+		ABT_cond_broadcast(abt_cond);
+		abt_waiting = false;
+	}
+	ABT_mutex_unlock(abt_lock);
+}
+
 static void
 abt_reset(void)
 {
@@ -188,6 +250,7 @@ static struct option abt_ops[] = {
 	 * test duration in seconds.
 	 */
 	{ "sec",	required_argument,	NULL,	's'	},
+	{ "ult",	no_argument,		NULL,	'u'	},
 };
 
 int
@@ -196,7 +259,7 @@ main(int argc, char **argv)
 	char	test_id = 0;
 	int	rc;
 
-	while ((rc = getopt_long(argc, argv, "t:n:s:",
+	while ((rc = getopt_long(argc, argv, "t:n:s:u",
 				 abt_ops, NULL)) != -1) {
 		switch (rc) {
 		default:
@@ -210,6 +273,9 @@ main(int argc, char **argv)
 			break;
 		case 's':
 			opt_secs = atoi(optarg);
+			break;
+		case 'u':
+			abt_in_ult = true;
 			break;
 		}
 	}
@@ -261,16 +327,51 @@ main(int argc, char **argv)
 	default:
 		break;
 	case 'c':
-		printf("UTL create rate test (concur=%d, secs=%d)\n",
+		printf("ULT create rate test (concur=%d, secs=%d)\n",
 		       opt_threads, opt_secs);
-		abt_create_rate();
-		break;
+		abt_ult_create_rate();
+		goto out;
 	case 's':
-		printf("UTL scheduling rate test (ULTs=%d, secs=%d)\n",
+		printf("ULT scheduling rate test (ULTs=%d, secs=%d)\n",
 		       opt_threads, opt_secs);
 		abt_sched_rate();
+		goto out;
+	case 'm':
+		printf("mutex creation rate test (secs=%d)\n",
+		       opt_secs);
+		cr_opc = CR_MUTEX;
+		abt_name = "mutex";
+		break;
+
+	case 'e':
+		printf("eventual creation rate test within ULT (secs=%d)\n",
+		       opt_secs);
+		cr_opc = CR_EVENTUAL;
+		abt_name = "eventual";
+		break;
+	case 'd':
+		printf("condition creation rate test within ULT (secs=%d)\n",
+		       opt_secs);
+		cr_opc = CR_COND;
+		abt_name = "cond";
 		break;
 	}
+
+	if (abt_in_ult) {
+		printf("run test in ULT\n");
+		abt_waiting = true;
+		rc = ABT_thread_create(abt_pool, abt_lock_create_rate, NULL,
+				       ABT_THREAD_ATTR_NULL, NULL);
+
+		ABT_mutex_lock(abt_lock);
+		if (abt_waiting)
+			ABT_cond_wait(abt_cond, abt_lock);
+		ABT_mutex_unlock(abt_lock);
+
+	} else {
+		abt_lock_create_rate(NULL);
+	}
+out:
 	abt_reset();
 
 	ABT_mutex_free(&abt_lock);

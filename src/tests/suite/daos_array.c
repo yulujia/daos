@@ -28,7 +28,7 @@
 
 #include "daos_test.h"
 
-#define STACK_BUF_LEN	24
+#define STACK_BUF_LEN	134217728
 
 static void
 byte_array_simple_stack(void **state)
@@ -41,9 +41,12 @@ byte_array_simple_stack(void **state)
 	daos_iov_t	 sg_iov;
 	daos_iod_t	 iod;
 	daos_recx_t	 recx;
-	char		 buf_out[STACK_BUF_LEN];
-	char		 buf[STACK_BUF_LEN];
+	char		 *buf_out;
+	char		 *buf;
 	int		 rc;
+
+	buf = malloc(STACK_BUF_LEN);
+	buf_out = malloc(STACK_BUF_LEN);
 
 	dts_buf_render(buf, STACK_BUF_LEN);
 
@@ -56,7 +59,7 @@ byte_array_simple_stack(void **state)
 	daos_iov_set(&dkey, "dkey", strlen("dkey"));
 
 	/** init scatter/gather */
-	daos_iov_set(&sg_iov, buf, sizeof(buf));
+	daos_iov_set(&sg_iov, buf, STACK_BUF_LEN);
 	sgl.sg_nr		= 1;
 	sgl.sg_nr_out		= 0;
 	sgl.sg_iovs		= &sg_iov;
@@ -65,9 +68,9 @@ byte_array_simple_stack(void **state)
 	daos_iov_set(&iod.iod_name, "akey", strlen("akey"));
 	daos_csum_set(&iod.iod_kcsum, NULL, 0);
 	iod.iod_nr	= 1;
-	iod.iod_size	= 1;
+	iod.iod_size	= STACK_BUF_LEN;
 	recx.rx_idx	= 0;
-	recx.rx_nr	= sizeof(buf);
+	recx.rx_nr	= 1;
 	iod.iod_recxs	= &recx;
 	iod.iod_eprs	= NULL;
 	iod.iod_csums	= NULL;
@@ -87,13 +90,13 @@ byte_array_simple_stack(void **state)
 
 	/** fetch */
 	print_message("reading data back ...\n");
-	memset(buf_out, 0, sizeof(buf_out));
-	daos_iov_set(&sg_iov, buf_out, sizeof(buf_out));
+	memset(buf_out, 0, STACK_BUF_LEN);
+	daos_iov_set(&sg_iov, buf_out, STACK_BUF_LEN);
 	rc = daos_obj_fetch(oh, DAOS_TX_NONE, &dkey, 1, &iod, &sgl, NULL, NULL);
 	assert_int_equal(rc, 0);
 	/** Verify data consistency */
 	print_message("validating data ...\n");
-	assert_memory_equal(buf, buf_out, sizeof(buf));
+	assert_memory_equal(buf, buf_out, STACK_BUF_LEN);
 
 	/** close object */
 	rc = daos_obj_close(oh, NULL);

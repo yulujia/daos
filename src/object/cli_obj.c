@@ -1467,7 +1467,8 @@ ec_set_head_params(struct ec_params* head, daos_obj_update_t *args, int cnt)
 		return -DER_NOMEM;
 	D_ALLOC_ARRAY(head->sgls, args->nr); 
 	if (head->sgls == NULL) {
-		free(head->iods);
+		D_FREE(head->iods);
+		head->iods = NULL;
 		return -DER_NOMEM;
 	}
 	for (i = 0; i < cnt; i++) {

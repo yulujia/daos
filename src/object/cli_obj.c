@@ -29,6 +29,7 @@
 
 #include <daos/object.h>
 #include <daos/container.h>
+#include <daos/erasure_code.h>
 #include <daos/pool.h>
 #include <daos_task.h>
 #include <daos_types.h>
@@ -1405,6 +1406,295 @@ obj_shard_task_sched(struct obj_auxi_args *obj_auxi)
 		tse_task_complete(obj_auxi->obj_task, 0);
 }
 
+struct ec_params {
+        daos_iod_t		*iods;
+	daos_sg_list_t		*sgls;
+	unsigned int		nr;
+        daos_iod_t		niod;
+	daos_sg_list_t		nsgl;
+	struct dc_parity	p_segs;
+        struct ec_params        *next;
+};
+
+static bool
+has_full_stripe(daos_iod_t* iod, struct daos_oclass_attr *oca)
+{
+	unsigned int ss = oca->u.ec.e_data_cells * oca->u.ec.e_cell_size;
+	int i;
+	
+	for (i = 0; i < iod->iod_nr; i++) {
+		if (iod->iod_type == DAOS_IOD_ARRAY) {
+			int start = iod->iod_recxs[i].rx_idx * iod->iod_size;
+			int length = iod->iod_recxs[i].rx_nr * iod->iod_size; 
+			if (length < ss) {
+				continue;
+			} else if ( length - (start % ss) >= ss ) {
+				return true;
+			}
+		} else if (iod->iod_type == DAOS_IOD_SINGLE &&
+			   iod->iod_size >= ss ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static void
+ec_init_params(struct ec_params* params, daos_iod_t *iod, daos_sg_list_t *sgl)
+{
+	params->niod		= *iod;
+	params->nsgl		= *sgl;
+	params->nr		= 0;
+	params->niod.iod_recxs	= NULL;	
+	params->niod.iod_nr	= 0;	
+	params->nsgl.sg_iovs	= NULL;	
+	params->nsgl.sg_nr	= 0;	
+	params->nsgl.sg_nr_out	= 0;	
+	params->p_segs.p_bufs	= NULL;
+	params->p_segs.nr	= 0;
+	params->iods		= NULL;
+	params->sgls		= NULL;
+	params->next		= NULL;
+}
+
+static int
+ec_set_head_params(struct ec_params* head, daos_obj_update_t *args, int cnt)
+{
+	int i;
+
+	D_ALLOC_ARRAY(head->iods, args->nr); 
+	if (head->iods == NULL)
+		return -DER_NOMEM;
+	D_ALLOC_ARRAY(head->sgls, args->nr); 
+	if (head->sgls == NULL) {
+		free(head->iods);
+		return -DER_NOMEM;
+	}
+	for (i = 0; i < cnt; i++) {
+		head->iods[i] = args->iods[i];
+		head->sgls[i] = args->sgls[i];
+	}
+	return 0;
+}
+
+static void
+move_sgl_cursors(daos_sg_list_t *sgl, int size, int *j, int *k)
+{
+	int buf_len;
+
+	if (size < sgl->sg_iovs[*j].iov_len - *k) {
+		*k += size;
+	} else {
+		buf_len = sgl->sg_iovs[*j].iov_len - *k;
+		for (*k = 0; *j < sgl->sg_nr; (*j)++) {
+			if (buf_len + sgl->sg_iovs[*j].iov_len > size) {
+				*k = size - buf_len;
+				break;
+			}
+			buf_len += sgl->sg_iovs[*j].iov_len;
+		}
+	}	
+}
+
+static int
+allocate_parity(struct dc_parity *par, unsigned int cs, unsigned int pc,
+		unsigned int prior_cnt)
+{
+	unsigned char** nbuf;
+	int i, rc = 0;
+
+	D_REALLOC_ARRAY(nbuf, par->p_bufs, prior_cnt+pc);
+	if (nbuf == NULL)
+		return -DER_NOMEM;
+	else if (nbuf != par->p_bufs)
+		par->p_bufs = nbuf;
+
+	for (i = prior_cnt; i < pc+prior_cnt; i++) {
+		D_ALLOC(par->p_bufs[i], cs);
+		if (par->p_bufs[i] == NULL)
+			return -DER_NOMEM;
+		par->nr++;
+	}
+	return rc;
+}
+
+static int
+ec_array_encode(struct ec_params *params, daos_iod_t *iod, daos_sg_list_t *sgl,
+		struct daos_oclass_attr *oca, int recx_idx, int *j, int *k)
+{
+	unsigned long	s_cur;
+	unsigned int	cs = oca->u.ec.e_cell_size;
+	unsigned int	dc = oca->u.ec.e_data_cells;
+	unsigned int	pc = oca->u.ec.e_parity_cells;
+	daos_recx_t     this_recx = iod->iod_recxs[recx_idx];
+	unsigned long	recx_start_offset = this_recx.rx_idx * iod->iod_size;
+	unsigned long	recx_end_offset = (this_recx.rx_nr * iod->iod_size) +
+					  recx_start_offset;
+	int		i, rc = 0;
+
+	s_cur = recx_start_offset + (recx_start_offset % (cs * dc));
+	if (s_cur != recx_start_offset)
+		move_sgl_cursors(sgl, recx_start_offset % (cs * dc), j, k);
+	for ( ; s_cur + cs*dc <= recx_end_offset;
+		params->niod.iod_nr += pc, s_cur += cs*dc) {
+		daos_recx_t *nrecx;
+		rc = allocate_parity(&(params->p_segs), cs, pc,
+				     params->niod.iod_nr);
+		if (rc != 0)
+			return rc;
+		rc = daos_encode_full_stripe(sgl, j, k, &(params->p_segs),
+					     params->niod.iod_nr, cs, dc, pc,
+					     &oca->u.ec.e_encode_mat,
+					     &oca->u.ec.e_g_tbls);
+		if (rc != 0)
+			return rc;
+		D_REALLOC_ARRAY(nrecx, params->niod.iod_recxs,
+				params->niod.iod_nr+pc);
+		if ( nrecx == NULL)
+			return -DER_NOMEM;
+		else if ( nrecx != params->niod.iod_recxs)
+			params->niod.iod_recxs = nrecx;
+		for (i = 0; i < pc; i++) {
+			 params->niod.iod_recxs[params->niod.iod_nr+i].rx_idx =
+			    HIGH_BIT | 
+			    ((s_cur+(unsigned long)(i*cs))/params->niod.iod_size);
+			 params->niod.iod_recxs[params->niod.iod_nr+i].rx_nr =
+				cs / params->niod.iod_size;
+		}
+	}
+	return rc;
+}
+
+static int
+ec_update_params(struct ec_params *params, daos_iod_t *iod, daos_sg_list_t *sgl,
+		 unsigned int cs)
+{
+	daos_recx_t *nrecx;
+	int i, rc =0;
+
+	D_REALLOC_ARRAY(nrecx, params->niod.iod_recxs,
+			params->niod.iod_nr + iod->iod_nr);
+	if (nrecx == NULL)
+		return -DER_NOMEM;
+	else if (nrecx != params->niod.iod_recxs)
+		params->niod.iod_recxs = nrecx;
+	for (i = 0; i < iod->iod_nr; i++) 
+		params->niod.iod_recxs[params->niod.iod_nr++] =
+			iod->iod_recxs[i];
+
+	D_ALLOC_ARRAY(params->nsgl.sg_iovs, sgl->sg_nr + params->p_segs.nr);
+	if (params->nsgl.sg_iovs == NULL)
+		return -DER_NOMEM;
+	for (i = 0; i < params->p_segs.nr; i++) {
+		params->nsgl.sg_iovs[i].iov_buf = params->p_segs.p_bufs[i];	
+		params->nsgl.sg_iovs[i].iov_buf_len = cs;	
+		params->nsgl.sg_iovs[i].iov_len = cs;	
+		params->nsgl.sg_nr++;	
+	}
+	for (i = 0; i < sgl->sg_nr; i++) 
+		params->nsgl.sg_iovs[params->nsgl.sg_nr++] = sgl->sg_iovs[i];
+
+	return rc;
+}
+
+static int
+free_ec_params_cb(tse_task_t *task, void *data)
+{
+	struct ec_params *head	= *((struct ec_params**)data);
+	int		 rc = task->dt_result;
+
+	D_FREE(head->iods);
+	D_FREE(head->sgls);
+	while (head != NULL) {
+		int i;
+		struct ec_params *current = head;
+		D_FREE(current->niod.iod_recxs);
+		for (i = 0; i < current->p_segs.nr; i++)
+			D_FREE(current->p_segs.p_bufs[i]);
+		D_FREE(current->p_segs.p_bufs);
+		head = current->next;
+		D_FREE(current);
+	}
+	return rc;
+}
+
+static int
+ec_obj_update(tse_task_t *task, daos_oclass_attr_t *oca)
+{
+	daos_obj_update_t	*args = dc_task_get_args(task);
+	struct ec_params	*head = NULL;
+	struct ec_params	*current = NULL;
+	int             	i, j, rc = 0;
+
+	for (i = 0; i < args->nr; i++) {
+		if ( has_full_stripe(&(args->iods[i]), oca) ) {
+			struct ec_params *params =
+			(struct ec_params*) calloc(1,sizeof(struct ec_params));
+			if (params == NULL) {
+				rc = -DER_NOMEM;
+				break;
+			}
+			ec_init_params(params, &args->iods[i], &args->sgls[i]);
+			if (head == NULL) {
+				head = params;
+				current = head;
+				rc = ec_set_head_params(head, args, i);
+				if (rc != 0)
+					break;
+			} else {
+				current->next = params;
+				current = params;
+			}
+			if (args->iods[i].iod_type == DAOS_IOD_ARRAY) {
+				int sgl_j = 0; int sgl_k = 0;
+				for (j = 0; j < args->iods[i].iod_nr; j++) {
+		   		     rc = ec_array_encode(params,
+							  &args->iods[i],
+							  &args->sgls[i], oca,
+							  j, &sgl_j, &sgl_k);
+				     if (rc != 0)
+					break;
+				}
+				rc = ec_update_params(params, &args->iods[i],
+						      &args->sgls[i],
+						      oca->u.ec.e_cell_size);
+				head->iods[i] = params->niod;
+				head->sgls[i] = params->nsgl;
+			} else if (args->iods[i].iod_type == DAOS_IOD_SINGLE &&
+				args->iods[i].iod_size >= oca->u.ec.e_cell_size *
+				oca->u.ec.e_data_cells) {
+				D_ASSERT(false);
+			}
+		} else if (head != NULL && &(head->sgls[i]) == NULL) {
+			/* add sgls[i] and iods[i] to head, since we're 
+			 * adding ec parity (head != NULL) and thus need to
+			 * replace the arrays in the update struct)
+			 */
+			head->iods[i] = args->iods[i];
+			head->sgls[i] = args->sgls[i];
+		}
+	}
+	if (rc != 0 && head != NULL) {
+		D_FREE(head->iods);
+		D_FREE(head->sgls);
+		while (head != NULL) {
+			current = head;
+			D_FREE(current->niod.iod_recxs);
+			for (i = 0; i < current->p_segs.nr; i++)
+				D_FREE(current->p_segs.p_bufs[i]);
+			D_FREE(current->p_segs.p_bufs);
+			head = current->next;
+			D_FREE(current);
+		}
+	} else if (head != NULL) {
+		args->iods = head->iods;
+		args->sgls = head->sgls;
+		tse_task_register_comp_cb(task, free_ec_params_cb, &head,
+					  sizeof(head));
+	}
+	return rc;
+}
+
 int
 dc_obj_update(tse_task_t *task)
 {
@@ -1435,6 +1725,14 @@ dc_obj_update(tse_task_t *task)
 		D_ERROR("failed by obj_hdl2ptr\n");
 		rc = -DER_NO_HDL;
 		goto out_task;
+	}
+
+	struct daos_oclass_attr *oca = daos_oclass_attr_find(obj->cob_md.omd_id);
+	if (oca->ca_resil == DAOS_RES_EC) {
+		rc = ec_obj_update(task, oca);
+		if (rc != 0) {
+			goto out_task;
+		}
 	}
 
 	obj_auxi = tse_task_stack_push(task, sizeof(*obj_auxi));

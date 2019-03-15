@@ -236,6 +236,24 @@ static struct daos_obj_class daos_obj_classes[] = {
 		},
 	},
 	{
+		.oc_name= "erasure_code_8data_2parity",
+		.oc_id= DAOS_OC_EC2PLUS1S_RW,
+		{
+			.ca_schema		= DAOS_OS_SINGLE,
+			.ca_resil		= DAOS_RES_EC,
+			.ca_grp_nr		= 3,
+			.u.ec			= {
+				.e_parity_cells = 1,
+				.e_data_cells	= 2,
+ 				/* 32 kiB cell size */
+				.e_cell_size    = 1 << 15,
+				.e_cells_p_ext  = 1,
+				.e_encode_mat	= NULL,
+				.e_g_tbls	= NULL,
+			},
+		},
+        },
+	{
 		.oc_name	= NULL,
 		.oc_id		= DAOS_OC_UNKNOWN,
 	},
@@ -293,7 +311,8 @@ daos_oclass_grp_size(struct daos_oclass_attr *oc_attr)
 		return oc_attr->u.repl.r_num;
 
 	case DAOS_RES_EC:
-		return oc_attr->u.ec.e_grp_size;
+		return oc_attr->u.ec.e_parity_cells +
+			oc_attr->u.ec.e_data_cells;
 	}
 }
 

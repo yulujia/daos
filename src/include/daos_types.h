@@ -565,7 +565,6 @@ typedef struct daos_oclass_attr {
 			unsigned int	e_cell_size;
 			/** number of cells per vos extent */
 			unsigned int	e_cells_p_ext;
-			unsigned char	*e_encode_mat;
 			unsigned char	*e_g_tbls;
 		} ec;
 	} u;

@@ -26,38 +26,43 @@
 
 #include "daos/erasure_code.h"
 
+/* Parameters converted to ISA-L terms:
+ * k - data cells
+ * m - parity cells
+ */
 static int
-daos_ec_encode_data(int k, int m, int len, unsigned char **encode_matrix,
-		    unsigned char **g_tbls, unsigned char **data,
-		    unsigned char **coding)
+daos_ec_encode_data(int k, int m, int len, unsigned char **g_tbls,
+		    unsigned char **data, unsigned char **coding)
 {
-	int rc = 0; 
+	unsigned char	*encode_matrix;
+	int 		rc = 0; 
 
-	if ( *encode_matrix == NULL) {
-		D_ALLOC(*encode_matrix, (k+m) * k);
-		if (!(*encode_matrix)) {
-			D_GOTO(failed, rc = -DER_NOMEM);
-		}
+	if ( *g_tbls == NULL) {
 		D_ALLOC(*g_tbls, 32 * k * m);
 		if ( !(*g_tbls)) {
-			free(*encode_matrix);
-			*encode_matrix = NULL;
 			D_GOTO(failed, rc = -DER_NOMEM);
 		}
-		gf_gen_cauchy1_matrix(*encode_matrix, k+m, k);
-		ec_init_tables(k, m, &(*encode_matrix)[k * k], *g_tbls);
+		D_ALLOC(encode_matrix, (k+m) * k);
+		if (!encode_matrix) {
+			D_FREE(*g_tbls);
+			*g_tbls = NULL;
+			D_GOTO(failed, rc = -DER_NOMEM);
+		}
+		gf_gen_cauchy1_matrix(encode_matrix, k+m, k);
+		ec_init_tables(k, m, &encode_matrix[k * k], *g_tbls);
+		D_FREE(encode_matrix);
 
 	}
 	ec_encode_data(len, k, m, *g_tbls, data, coding);
-
 failed:
 	return rc;
 }
 
+/* Encode full stripe from SGL */
 int
-daos_encode_full_stripe(daos_sg_list_t *sgl, int *j, int *k, 
+daos_encode_full_stripe(daos_sg_list_t *sgl, unsigned int *j, size_t *k, 
 			struct dc_parity *parity, int p_idx, int cs, int sw,
-			int pc, unsigned char **encode_mat, unsigned char **g_tbls)
+			int pc, unsigned char **g_tbls)
 {
 	unsigned char *data[sw];
 	unsigned char *ldata[sw];
@@ -68,7 +73,7 @@ daos_encode_full_stripe(daos_sg_list_t *sgl, int *j, int *k,
 		if (sgl->sg_iovs[*j].iov_len - *k >= cs) {
 			unsigned char* from =
 				(unsigned char*)sgl->sg_iovs[*j].iov_buf;
-			data[i] = &(from[*k]);
+			data[i] = &from[*k];
 			*k += cs;
 			if (*k == sgl->sg_iovs[*j].iov_len) {
 				*k = 0; (*j)++;
@@ -84,9 +89,10 @@ daos_encode_full_stripe(daos_sg_list_t *sgl, int *j, int *k,
 					sgl->sg_iovs[*j].iov_len-*k :
 					cs - cp_cnt;
 				unsigned char* from = sgl->sg_iovs[*j].iov_buf;
-				memcpy(&(ldata[lcnt][cp_cnt]), &(from[*k]), cp_amt);
+				memcpy(&ldata[lcnt][cp_cnt], &from[*k], cp_amt);
 				if (sgl->sg_iovs[*j].iov_len-*k < cs - cp_cnt) {
-					 *k = 0; (*j)++;
+					 *k = 0;
+					(*j)++;
 				} else
 					*k += cp_amt;
 				cp_cnt += cp_amt;
@@ -94,9 +100,8 @@ daos_encode_full_stripe(daos_sg_list_t *sgl, int *j, int *k,
 			data[i] = ldata[lcnt++];
 		}
 				       
-			
-	rc = daos_ec_encode_data(sw, pc, cs, encode_mat, g_tbls, data,
-				 &(parity->p_bufs[p_idx]));
+	rc = daos_ec_encode_data(sw, pc, cs, g_tbls, data,
+				 &parity->p_bufs[p_idx]);
 out:
 	for (i = 0; i < lcnt; i++)
 		free(ldata[i]);

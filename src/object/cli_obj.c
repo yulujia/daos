@@ -1416,11 +1416,14 @@ struct ec_params {
         struct ec_params        *next;
 };
 
+/* Determines weather a given IOD contains a recx that is at least a full
+ * stipe's worth of data.
+ */
 static bool
 has_full_stripe(daos_iod_t* iod, struct daos_oclass_attr *oca)
 {
 	unsigned int ss = oca->u.ec.e_data_cells * oca->u.ec.e_cell_size;
-	int i;
+	unsigned int i;
 	
 	for (i = 0; i < iod->iod_nr; i++) {
 		if (iod->iod_type == DAOS_IOD_ARRAY) {
@@ -1439,6 +1442,7 @@ has_full_stripe(daos_iod_t* iod, struct daos_oclass_attr *oca)
 	return false;
 }
 
+/* Initialize a param structure for an IOD--SGL pair. */
 static void
 ec_init_params(struct ec_params* params, daos_iod_t *iod, daos_sg_list_t *sgl)
 {
@@ -1457,10 +1461,14 @@ ec_init_params(struct ec_params* params, daos_iod_t *iod, daos_sg_list_t *sgl)
 	params->next		= NULL;
 }
 
+/* The head of the params list contains the replacement IOD and SGL arrays.
+ * These are used only when stripes have been encoded for the update.
+ */
 static int
-ec_set_head_params(struct ec_params* head, daos_obj_update_t *args, int cnt)
+ec_set_head_params(struct ec_params* head, daos_obj_update_t *args,
+		   unsigned int cnt)
 {
-	int i;
+	unsigned int i;
 
 	D_ALLOC_ARRAY(head->iods, args->nr); 
 	if (head->iods == NULL)
@@ -1478,10 +1486,11 @@ ec_set_head_params(struct ec_params* head, daos_obj_update_t *args, int cnt)
 	return 0;
 }
 
+/* Moves the SGL "cursors to the start of a full stripe */
 static void
-move_sgl_cursors(daos_sg_list_t *sgl, int size, int *j, int *k)
+move_sgl_cursors(daos_sg_list_t *sgl, size_t size, unsigned int *j, size_t *k)
 {
-	int buf_len;
+	size_t buf_len;
 
 	if (size < sgl->sg_iovs[*j].iov_len - *k) {
 		*k += size;
@@ -1497,12 +1506,14 @@ move_sgl_cursors(daos_sg_list_t *sgl, int size, int *j, int *k)
 	}	
 }
 
+/* Allocates a stripe's worth of parity cells. */
 static int
 allocate_parity(struct dc_parity *par, unsigned int cs, unsigned int pc,
 		unsigned int prior_cnt)
 {
-	unsigned char** nbuf;
-	int i, rc = 0;
+	unsigned char	**nbuf;
+	unsigned int	i;
+	int		rc = 0;
 
 	D_REALLOC_ARRAY(nbuf, par->p_bufs, prior_cnt+pc);
 	if (nbuf == NULL)
@@ -1519,9 +1530,12 @@ allocate_parity(struct dc_parity *par, unsigned int cs, unsigned int pc,
 	return rc;
 }
 
+/* Encode all of the full stripes contained within the recx at recx_idx.
+ */
 static int
 ec_array_encode(struct ec_params *params, daos_iod_t *iod, daos_sg_list_t *sgl,
-		struct daos_oclass_attr *oca, int recx_idx, int *j, int *k)
+		struct daos_oclass_attr *oca, int recx_idx, unsigned int *j,
+		size_t *k)
 {
 	unsigned long	s_cur;
 	unsigned int	cs = oca->u.ec.e_cell_size;
@@ -1531,7 +1545,8 @@ ec_array_encode(struct ec_params *params, daos_iod_t *iod, daos_sg_list_t *sgl,
 	unsigned long	recx_start_offset = this_recx.rx_idx * iod->iod_size;
 	unsigned long	recx_end_offset = (this_recx.rx_nr * iod->iod_size) +
 					  recx_start_offset;
-	int		i, rc = 0;
+	unsigned int	i;
+	int 		rc = 0;
 
 	s_cur = recx_start_offset + (recx_start_offset % (cs * dc));
 	if (s_cur != recx_start_offset)
@@ -1545,7 +1560,6 @@ ec_array_encode(struct ec_params *params, daos_iod_t *iod, daos_sg_list_t *sgl,
 			return rc;
 		rc = daos_encode_full_stripe(sgl, j, k, &(params->p_segs),
 					     params->niod.iod_nr, cs, dc, pc,
-					     &oca->u.ec.e_encode_mat,
 					     &oca->u.ec.e_g_tbls);
 		if (rc != 0)
 			return rc;
@@ -1566,12 +1580,18 @@ ec_array_encode(struct ec_params *params, daos_iod_t *iod, daos_sg_list_t *sgl,
 	return rc;
 }
 
+/* Updates the params instance for a IOD -- SGL pair.
+ * Adds the parity recxs first, then the original recx entries.
+ * Similarly, the parity cells are placed first in the SGL, followed by the
+ * input entries.
+ */
 static int
 ec_update_params(struct ec_params *params, daos_iod_t *iod, daos_sg_list_t *sgl,
 		 unsigned int cs)
 {
-	daos_recx_t *nrecx;
-	int i, rc =0;
+	daos_recx_t	*nrecx;
+	unsigned int 	i;
+	int		rc = 0;
 
 	D_REALLOC_ARRAY(nrecx, params->niod.iod_recxs,
 			params->niod.iod_nr + iod->iod_nr);
@@ -1598,6 +1618,7 @@ ec_update_params(struct ec_params *params, daos_iod_t *iod, daos_sg_list_t *sgl,
 	return rc;
 }
 
+/* Call-back that recovers EC allocated memory */
 static int
 free_ec_params_cb(tse_task_t *task, void *data)
 {
@@ -1619,13 +1640,17 @@ free_ec_params_cb(tse_task_t *task, void *data)
 	return rc;
 }
 
+/* Iterates over the IODs in the update, encoding all full stripes contained
+ * within each recx.
+ */
 static int
 ec_obj_update(tse_task_t *task, daos_oclass_attr_t *oca)
 {
 	daos_obj_update_t	*args = dc_task_get_args(task);
 	struct ec_params	*head = NULL;
 	struct ec_params	*current = NULL;
-	int             	i, j, rc = 0;
+	unsigned int           	i, j;
+	int			rc = 0;
 
 	for (i = 0; i < args->nr; i++) {
 		if ( has_full_stripe(&(args->iods[i]), oca) ) {
@@ -1647,7 +1672,8 @@ ec_obj_update(tse_task_t *task, daos_oclass_attr_t *oca)
 				current = params;
 			}
 			if (args->iods[i].iod_type == DAOS_IOD_ARRAY) {
-				int sgl_j = 0; int sgl_k = 0;
+				unsigned int sgl_j = 0;
+				size_t sgl_k = 0;
 				for (j = 0; j < args->iods[i].iod_nr; j++) {
 		   		     rc = ec_array_encode(params,
 							  &args->iods[i],
@@ -1661,15 +1687,18 @@ ec_obj_update(tse_task_t *task, daos_oclass_attr_t *oca)
 						      oca->u.ec.e_cell_size);
 				head->iods[i] = params->niod;
 				head->sgls[i] = params->nsgl;
-			} else if (args->iods[i].iod_type == DAOS_IOD_SINGLE &&
-				args->iods[i].iod_size >= oca->u.ec.e_cell_size *
-				oca->u.ec.e_data_cells) {
-				D_ASSERT(false);
+			} else {
+				D_ASSERT(args->iods[i].iod_type ==
+					 DAOS_IOD_SINGLE &&
+					 args->iods[i].iod_size >=
+					 oca->u.ec.e_cell_size *
+					 oca->u.ec.e_data_cells);
+				/* Encode single value */
 			}
 		} else if (head != NULL && &(head->sgls[i]) == NULL) {
-			/* add sgls[i] and iods[i] to head, since we're 
+			/* Add sgls[i] and iods[i] to head. Since we're 
 			 * adding ec parity (head != NULL) and thus need to
-			 * replace the arrays in the update struct)
+			 * replace the arrays in the update struct.
 			 */
 			head->iods[i] = args->iods[i];
 			head->sgls[i] = args->sgls[i];

@@ -248,7 +248,6 @@ static struct daos_obj_class daos_obj_classes[] = {
  				/* 32 kiB cell size */
 				.e_cell_size    = 1 << 15,
 				.e_cells_p_ext  = 1,
-				.e_encode_mat	= NULL,
 				.e_g_tbls	= NULL,
 			},
 		},

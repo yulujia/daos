@@ -36,11 +36,24 @@ struct dc_parity {
        unsigned char   **p_bufs;
 };
 
+/**
+ * Encode (using ISA-L) a full stripe from the submitted scatter-gather list.
+ *
+ * \param sgl		[IN]		The SGL containing the user data.
+ * \param j		[IN|OUT]	Index for start of SGL sg_iovs.
+ * \param k		[IN|OUT]	Index into sg_iovs' io_buf.
+ * \param parity	[IN|OUT]	Struct containing parity buffers.
+ * \param p_idx		[IN]		Index into parity p_bufs array.
+ * \param cs		[IN]		Cell size in bytes.
+ * \param dc		[IN]		Number of data cells in stripe.
+ * \param pc		[IN]		Number of parity cells in stripe.
+ * \param g_tbls	[IN]		Galois field encoding table (stored
+ * 					in object class structure).
+ */
 int
-daos_encode_full_stripe(daos_sg_list_t *sgl, int *j, int *k,
+daos_encode_full_stripe(daos_sg_list_t *sgl, unsigned int *j, size_t *k,
                         struct dc_parity *parity, int p_idx, int cs, int dc,
-			int pc, unsigned char **encode_mat,
-			unsigned char **g_tbls);
+			int pc, unsigned char **g_tbls);
 
 
 #endif

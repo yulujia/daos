@@ -41,6 +41,7 @@ daos_ec_encode_data(int k, int m, int len, unsigned char **encode_matrix,
 		D_ALLOC(*g_tbls, 32 * k * m);
 		if ( !(*g_tbls)) {
 			free(*encode_matrix);
+			*encode_matrix = NULL;
 			D_GOTO(failed, rc = -DER_NOMEM);
 		}
 		gf_gen_cauchy1_matrix(*encode_matrix, k+m, k);

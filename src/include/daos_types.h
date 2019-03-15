@@ -525,6 +525,9 @@ enum {
 				 * These 3 XX_SPEC are mostly for testing
 				 * purpose.
 				 */
+       DAOS_OC_EC2PLUS1S_RW,   /* Erasure code, 2 data shards,
+				* 1 parity shard
+			  	*/
 };
 
 /** Object class attributes */
@@ -554,14 +557,16 @@ typedef struct daos_oclass_attr {
 
 		/** Erasure coding attributes */
 		struct daos_ec_attr {
-			/** Type of EC */
-			unsigned int	 e_type;
-			/** EC group size */
-			unsigned int	 e_grp_size;
-			/**
-			 * TODO: add members to describe erasure coding
-			 * attributes
-			 */
+			/** Type of EC (number of parity cells */
+			unsigned int	e_parity_cells;
+			/** EC stripe width (number of data cells) */
+			unsigned int	e_data_cells;
+			/** size of cell in bytes (aka stripe depth) */
+			unsigned int	e_cell_size;
+			/** number of cells per vos extent */
+			unsigned int	e_cells_p_ext;
+			unsigned char	*e_encode_mat;
+			unsigned char	*e_g_tbls;
 		} ec;
 	} u;
 	/** TODO: add more attributes */

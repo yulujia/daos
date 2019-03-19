@@ -1486,7 +1486,7 @@ ec_set_head_params(struct ec_params* head, daos_obj_update_t *args,
 	return 0;
 }
 
-/* Moves the SGL "cursors to the start of a full stripe */
+/* Moves the SGL "cursors" to the start of a full stripe */
 static void
 move_sgl_cursors(daos_sg_list_t *sgl, size_t size, unsigned int *j, size_t *k)
 {

@@ -4,7 +4,7 @@ title: DAOS Storage Stack
 ---
 # DAOS
 [![Build Status](https://travis-ci.org/daos-stack/daos.svg?branch=master)](https://travis-ci.org/daos-stack/daos)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE.html)
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/4163f52ec65e4ba8991208288a9a15a6)](https://www.codacy.com/app/johann.lombardi/daos?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=daos-stack/daos&amp;utm_campaign=Badge_Grade)
 
 > :warning: **Warning:** DAOS is under heavy development. Use at your own risk.
@@ -15,7 +15,7 @@ The **D**istributed **A**synchronous **O**bject **S**torage (DAOS) is an open-so
 
 ## License
 
-DAOS is licensed under the Apache License Version 2.0. Please see the [LICENSE](./LICENSE) & [NOTICE](./NOTICE) files for more information.
+DAOS is licensed under the Apache License Version 2.0. Please see the [LICENSE](./LICENSE.html) & [NOTICE](./NOTICE.html) files for more information.
 
 ## Documentations
 

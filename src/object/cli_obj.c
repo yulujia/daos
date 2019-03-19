@@ -1417,7 +1417,7 @@ struct ec_params {
 };
 
 /* Determines weather a given IOD contains a recx that is at least a full
- * stipe's worth of data.
+ * stripe's worth of data.
  */
 static bool
 has_full_stripe(daos_iod_t* iod, struct daos_oclass_attr *oca)

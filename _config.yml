@@ -1,2 +1,11 @@
+theme: jekyll-theme-tactile
 highlighter: rouge
-baseurl: /daos
+title: DAOS Object Stack
+email: daos@daos.groups.io
+description: DAOS is a highly scalable open source storage stack.
+baseurl: "/daos"
+gems:
+    - jekyll-mentions
+
+plugins:
+    - jekyll-feed

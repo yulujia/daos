@@ -634,6 +634,12 @@ ds_obj_rw_local_hdlr(crt_rpc_t *rpc, uint32_t tag, struct ds_cont_hdl *cont_hdl,
 		ds_obj_rw_echo_handler(rpc);
 		return 0;
 	}
+	D_INFO("shard: %u, start_shard %u\n", orw->orw_oid.id_shard, orw->orw_start_shard);
+	D_INFO("opc %d "DF_UOID" dkey %d %s tag %d eph "DF_U64".\n",
+		opc_get(rpc->cr_opc), DP_UOID(orw->orw_oid),
+		(int)orw->orw_dkey.iov_len, (char *)orw->orw_dkey.iov_buf,
+		tag, orw->orw_epoch);
+
 
 	D_DEBUG(DB_TRACE, "opc %d "DF_UOID" dkey %d %s tag %d eph "DF_U64".\n",
 		opc_get(rpc->cr_opc), DP_UOID(orw->orw_oid),
@@ -726,6 +732,7 @@ ds_obj_rw_handler(crt_rpc_t *rpc)
 	bool				 update;
 	bool				 dispatch;
 	int				 dispatch_rc = 0;
+	unsigned long			 tgt_set = 0;
 	int				 rc;
 
 	D_ASSERT(orw != NULL);
@@ -759,12 +766,15 @@ ds_obj_rw_handler(crt_rpc_t *rpc)
 		if (update && dispatch)
 			D_GOTO(out, rc = -DER_STALE);
 	}
-
+	
 	/* dispatch to other tgts when needed */
 	if (dispatch) {
-		rc = ds_obj_req_disp_prepare(rpc->cr_opc,
-			orw->orw_shard_tgts.ca_arrays,
-			orw->orw_shard_tgts.ca_count,
+		struct daos_oclass_attr *oca =
+			daos_oclass_attr_find(orw->orw_oid.id_pub);
+		D_INFO("resil: %u\n", oca->ca_resil);
+		rc = ds_obj_req_disp_prepare(rpc->cr_opc, tgt_set,
+			orw->orw_shard_tgts.ca_arrays, 
+			orw->orw_shard_tgts.ca_count, orw->orw_start_shard,
 			obj_update_prefw, orw, obj_update_postfw, orw,
 			&obj_arg);
 		if (rc != 0) {
@@ -1218,9 +1228,9 @@ ds_obj_punch_handler(crt_rpc_t *rpc)
 	}
 
 	if (dispatch) {
-		rc = ds_obj_req_disp_prepare(rpc->cr_opc,
+		rc = ds_obj_req_disp_prepare(rpc->cr_opc, 0,
 			opi->opi_shard_tgts.ca_arrays,
-			opi->opi_shard_tgts.ca_count,
+			opi->opi_shard_tgts.ca_count, 0,
 			obj_punch_prefw, opi, obj_punch_postfw, opi,
 			&obj_arg);
 		if (rc != 0) {
@@ -1481,20 +1491,34 @@ out:
 }
 
 int
-ds_obj_req_disp_prepare(crt_opcode_t opc,
+ds_obj_req_disp_prepare(crt_opcode_t opc, uint64_t tgt_set,
 			struct daos_obj_shard_tgt *fw_shard_tgts,
-			uint32_t fw_cnt, ds_iofw_cb_t prefw_cb,
-			void *prefw_arg, ds_iofw_cb_t postfw_cb,
-			void *postfw_arg, struct obj_req_disp_arg **arg)
+			uint32_t fw_cnt, uint32_t start_shard,
+			ds_iofw_cb_t prefw_cb, void *prefw_arg,
+			ds_iofw_cb_t postfw_cb, void *postfw_arg,
+			struct obj_req_disp_arg **arg)
 {
 	struct obj_req_disp_arg		*obj_arg;
 	struct shard_req_fw_arg		*shard_arg;
 	ABT_future			 future;
+	unsigned long 			 full = ((unsigned long)1 << (fw_cnt+1)) - 1;
+	unsigned int			 new_fw_cnt = 0;
 	int				 i, rc;
+	
 
 	D_ASSERT(fw_cnt >= 1);
+	if (tgt_set && tgt_set != full) {
+		for (i = 0; i <= fw_cnt; i++) {
+			if (tgt_set & ((unsigned long)1 << i)) {
+				new_fw_cnt++;
+			}
+		}
+	} else
+		new_fw_cnt = fw_cnt;
+		
+		
 	D_ALLOC(obj_arg, sizeof(struct obj_req_disp_arg) +
-			 fw_cnt * sizeof(struct shard_req_fw_arg));
+			 new_fw_cnt * sizeof(struct shard_req_fw_arg));
 	if (obj_arg == NULL)
 		return -DER_NOMEM;
 
@@ -1515,8 +1539,11 @@ ds_obj_req_disp_prepare(crt_opcode_t opc,
 
 	shard_arg = (struct shard_req_fw_arg *)(obj_arg + 1);
 	for (i = 0; i < fw_cnt; i++, shard_arg++) {
-		shard_arg->fw_shard_tgt	= fw_shard_tgts + i;
-		shard_arg->fw_obj_arg	= obj_arg;
+		if (!tgt_set || tgt_set & ((unsigned long)1 <<
+			(start_shard - fw_shard_tgts[i].st_shard))) {
+			shard_arg->fw_shard_tgt	= fw_shard_tgts + i;
+			shard_arg->fw_obj_arg	= obj_arg;
+		}
 	}
 
 	*arg = obj_arg;

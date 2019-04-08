@@ -617,6 +617,13 @@ typedef struct {
 	daos_oclass_attr_t	*oa_oa;
 } daos_obj_attr_t;
 
+/** Status of a record. Users will only see VALID, EMPTY, or PUNCHED */
+typedef enum {
+	DAOS_REC_VALID = 0,
+	DAOS_REC_HOLE,
+	DAOS_REC_UNKOWN, /* for internal use, MSC - not needed? */
+} daos_record_stat_t;
+
 /** key type */
 typedef daos_iov_t daos_key_t;
 
@@ -702,6 +709,16 @@ typedef struct {
 	daos_csum_buf_t		*iod_csums;
 	/** Epoch range associated with each extent */
 	daos_epoch_range_t	*iod_eprs;
+	/*
+	 * Return the number of extent fragments required for \a iom_recxs in
+	 * daos_iom_t to retrieve the status of all the extent fragments.
+	 */
+	daos_size_t		iod_nr_frags;
+	/*
+	 * Return the highest valid index from the recxs of a fetch op. This is
+	 * convenient for higher level APIs to detect short reads.
+	 */
+	daos_off_t		iod_max_valid_idx;
 } daos_iod_t;
 
 /** Get a specific checksum given an index */
@@ -711,6 +728,32 @@ daos_iod_csum(daos_iod_t *iod, int csum_index)
 	return iod->iod_csums ? &iod->iod_csums[csum_index] : NULL;
 }
 
+/**
+ * An I/O map represents the physical extent mapping inside an object for a
+ * range of indices. Note this is usefuly only for Akeys with Array type
+ * records. For single value, if the value is punched and does not exist,
+ * iod_size would be set to 0 to indicate that.
+ */
+typedef struct {
+	/** akey for this iom */
+	daos_key_t		iom_name;
+	/** type of value - DAOS_IOD_ARRAY only makes sense here */
+	daos_iod_type_t		iom_type;
+	/** Size of the single value or the record size */
+	daos_size_t		iom_size;
+	/*
+	 * Number of entries in the \a iom_recxs. User can guess and preallocate
+	 * \a iom_recxs on the first fetch. If it was enough (iod_nr_frags <=
+	 * iom_nr), no subsequent call to fetch is required. Otherwise the
+	 * number of extents returned here are truncated and a second call to
+	 * fetch with this map will be required to retrieve all the fragments.
+	 */
+	unsigned int		iom_nr;
+	/** Array of extents - ignored for single value */
+	daos_recx_t		*iom_recxs;
+	/** Indicate the status of each extent above */
+	daos_record_stat_t	*iom_recxs_status;
+} daos_iom_t;
 /**
  * A I/O map represents the physical extent mapping inside an array for a
  * given range of indices.

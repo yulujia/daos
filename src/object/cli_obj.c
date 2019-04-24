@@ -455,12 +455,13 @@ out:
 }
 
 static int
-obj_shards_2_fwtgts(struct dc_object *obj, uint32_t map_ver,
+obj_shards_2_fwtgts(struct dc_object *obj, uint32_t map_ver, uint64_t tgt_set,
 		    uint32_t *start_shard, uint32_t *shard_cnt,
 		    struct daos_obj_shard_tgt **fw_shard_tgts, uint32_t *fw_cnt)
 {
 	struct daos_obj_shard_tgt	*shard_tgts = *fw_shard_tgts;
 	uint32_t			 lead_shard;
+	uint32_t			 new_fw_cnt = 0;
 	uint32_t			 i, j;
 	int				 rc;
 
@@ -478,25 +479,35 @@ obj_shards_2_fwtgts(struct dc_object *obj, uint32_t map_ver,
 	}
 	lead_shard = rc;
 
-	if (shard_tgts != NULL && *fw_cnt != *shard_cnt - 1) {
+	if (tgt_set) {
+		for (i = 0; i < *shard_cnt; i++) {
+			if ( *start_shard + i != lead_shard &&
+			      tgt_set & (1UL << i)) {
+				new_fw_cnt++;
+			}
+		}
+	} else
+		new_fw_cnt = *shard_cnt -1;
+
+	if (shard_tgts != NULL && *fw_cnt != new_fw_cnt) {
 		/* fw_cnt possibly changed per progressive layout */
 		D_FREE(shard_tgts);
 		*fw_shard_tgts = NULL;
-		*fw_cnt = 0;
 		shard_tgts = NULL;
+		*fw_cnt = 0;
 	}
 	if (shard_tgts == NULL) {
-		D_ALLOC_ARRAY(shard_tgts, *shard_cnt - 1);
+		D_ALLOC_ARRAY(shard_tgts, new_fw_cnt);
 		if (shard_tgts == NULL)
 			return -DER_NOMEM;
 		*fw_shard_tgts = shard_tgts;
-		*fw_cnt = *shard_cnt - 1;
+		*fw_cnt = new_fw_cnt;
 	}
 	for (i = 0, j = 0; i < *shard_cnt; i++) {
 		uint32_t	shard;
 
 		shard = *start_shard + i;
-		if (shard == lead_shard)
+		if (shard == lead_shard || (tgt_set && !( tgt_set & 1UL << i)))
 			continue;
 
 		rc = obj_shard_tgts_query(obj, map_ver, shard,
@@ -919,6 +930,7 @@ struct shard_auxi_args {
 	uint32_t		 shard;
 	uint32_t		 target;
 	uint32_t		 map_ver;
+	uint32_t	 	 start_shard;
 };
 
 struct obj_list_arg {
@@ -1310,6 +1322,7 @@ shard_update_task(tse_task_t *task)
 				 sizeof(args->dkey_hash));
 	rc = dc_obj_shard_update(obj_shard, args->epoch, args->dkey, args->nr,
 				 args->iods, args->sgls, &args->auxi.map_ver,
+				 args->auxi.start_shard,
 				 args->auxi.obj_auxi->fw_shard_tgts,
 				 args->auxi.obj_auxi->fw_cnt, task);
 
@@ -1420,7 +1433,8 @@ struct ec_params {
  * stripe's worth of data.
  */
 static bool
-has_full_stripe(daos_iod_t* iod, struct daos_oclass_attr *oca)
+has_full_stripe(daos_iod_t* iod, struct daos_oclass_attr *oca,
+		uint64_t *tgt_set)
 {
 	unsigned int ss = oca->u.ec.e_data_cells * oca->u.ec.e_cell_size;
 	unsigned int i;
@@ -1432,10 +1446,12 @@ has_full_stripe(daos_iod_t* iod, struct daos_oclass_attr *oca)
 			if (length < ss) {
 				continue;
 			} else if ( length - (start % ss) >= ss ) {
+				*tgt_set = ~0UL;
 				return true;
 			}
 		} else if (iod->iod_type == DAOS_IOD_SINGLE &&
 			   iod->iod_size >= ss ) {
+			*tgt_set = ~0UL;
 			return true;
 		}
 	}
@@ -1465,7 +1481,7 @@ ec_init_params(struct ec_params* params, daos_iod_t *iod, daos_sg_list_t *sgl)
  * These are used only when stripes have been encoded for the update.
  */
 static int
-ec_set_head_params(struct ec_params* head, daos_obj_update_t *args,
+ec_set_head_params(struct ec_params *head, daos_obj_update_t *args,
 		   unsigned int cnt)
 {
 	unsigned int i;
@@ -1482,6 +1498,7 @@ ec_set_head_params(struct ec_params* head, daos_obj_update_t *args,
 	for (i = 0; i < cnt; i++) {
 		head->iods[i] = args->iods[i];
 		head->sgls[i] = args->sgls[i];
+		head->nr++;
 	}
 	return 0;
 }
@@ -1599,9 +1616,13 @@ ec_update_params(struct ec_params *params, daos_iod_t *iod, daos_sg_list_t *sgl,
 		return -DER_NOMEM;
 	else if (nrecx != params->niod.iod_recxs)
 		params->niod.iod_recxs = nrecx;
-	for (i = 0; i < iod->iod_nr; i++) 
+	for (i = 0; i < iod->iod_nr; i++) {
 		params->niod.iod_recxs[params->niod.iod_nr++] =
 			iod->iod_recxs[i];
+		D_INFO("adding - start: %lu, length: %lu\n",
+			iod->iod_recxs[i].rx_idx,
+			iod->iod_recxs[i].rx_nr);
+	}
 
 	D_ALLOC_ARRAY(params->nsgl.sg_iovs, sgl->sg_nr + params->p_segs.nr);
 	if (params->nsgl.sg_iovs == NULL)
@@ -1623,28 +1644,83 @@ static int
 free_ec_params_cb(tse_task_t *task, void *data)
 {
 	struct ec_params *head	= *((struct ec_params**)data);
-	int		 rc = task->dt_result;
+	int		  i, rc = task->dt_result;
 
-	D_FREE(head->iods);
-	D_FREE(head->sgls);
+	for (i = 0; i < head->nr; i++)
+		D_INFO("entry: %d, type: %d, size: %lu \n",i, head->iods[i].iod_type,
+			head->iods[i].iod_size);
+	D_INFO("d_free head->iods\n");
+	//D_FREE(head->iods);
+	D_INFO("d_free head->sgls\n");
+	//D_FREE(head->sgls);
 	while (head != NULL) {
-		int i;
+		// int i;
 		struct ec_params *current = head;
-		D_FREE(current->niod.iod_recxs);
-		for (i = 0; i < current->p_segs.nr; i++)
-			D_FREE(current->p_segs.p_bufs[i]);
-		D_FREE(current->p_segs.p_bufs);
+		D_INFO("d_free current->niod.iod_recxs\n");
+		//D_FREE(current->niod.iod_recxs);
+		D_INFO("d_free current->nsgl.sg_iovs\n");
+		//D_FREE(current->nsgl.sg_iovs);
+		for (i = 0; i < current->p_segs.nr; i++) {
+			D_INFO("d_free current->p_segs.p_bufs[%d]\n", i);
+		//	D_FREE(current->p_segs.p_bufs[i]);
+		}
+		D_INFO("d_free current->p_segs.p_bufs\n");
+		//D_FREE(current->p_segs.p_bufs);
 		head = current->next;
+		//D_INFO("d_free current\n");
 		D_FREE(current);
 	}
+	D_INFO("free_ec_params_cb complete\n");
 	return rc;
+}
+
+static void
+ec_init_tgt_set(daos_iod_t *iods, unsigned int nr,
+		struct daos_oclass_attr *oca, unsigned long *tgt_set)
+{
+        unsigned int    cs = oca->u.ec.e_cell_size;
+        unsigned int    dc = oca->u.ec.e_data_cells;
+        unsigned int    pc = oca->u.ec.e_parity_cells;
+	unsigned long 	full = (1UL <<  (dc+pc)) - 1;
+	unsigned int i, j;
+
+	for (i = 0; i < nr; i++) {
+		D_INFO("nr = %u, nr_i =  %d\n", nr, i); 
+		if (iods->iod_type != DAOS_IOD_ARRAY)
+			continue;
+		for (j = 0; j < iods[i].iod_nr; j++) {
+			unsigned long k;
+	
+			D_INFO("iod_nr = %u, j =  %u\n", iods[i].iod_nr, j); 
+			D_INFO("recxs != null: %d\n", iods[i].iod_recxs != NULL); 
+			unsigned long rs = iods[i].iod_recxs[j].rx_idx *
+					iods[i].iod_size;
+			unsigned long re = iods[i].iod_recxs[j].rx_nr *
+						iods[i].iod_size + rs - 1;
+			D_INFO("rs = %lu, re = %lu\n", rs, re);
+			if (HIGH_BIT & rs)
+				continue;
+			for (k = rs; k <= re; k += cs) {
+				unsigned int cell = k/cs;
+				*tgt_set |= 1UL << (cell+pc);
+				if (*tgt_set == full)
+					return;
+			}
+		}
+	}
+	if (*tgt_set) {
+		D_INFO("setting for parity targets, full = %lu\n", full);
+		for (i = 0; i < pc; i++)
+		*tgt_set |= 1UL << i;
+		D_INFO("set for parity targets: %lu\n", *tgt_set);
+	}
 }
 
 /* Iterates over the IODs in the update, encoding all full stripes contained
  * within each recx.
  */
 static int
-ec_obj_update(tse_task_t *task, daos_oclass_attr_t *oca)
+ec_obj_update(tse_task_t *task, daos_oclass_attr_t *oca, uint64_t *tgt_set)
 {
 	daos_obj_update_t	*args = dc_task_get_args(task);
 	struct ec_params	*head = NULL;
@@ -1653,7 +1729,8 @@ ec_obj_update(tse_task_t *task, daos_oclass_attr_t *oca)
 	int			rc = 0;
 
 	for (i = 0; i < args->nr; i++) {
-		if ( has_full_stripe(&(args->iods[i]), oca) ) {
+		if ( has_full_stripe(&(args->iods[i]), oca, tgt_set) ) {
+			D_INFO("Has full stripe\n");
 			struct ec_params *params =
 			(struct ec_params*) calloc(1,sizeof(struct ec_params));
 			if (params == NULL) {
@@ -1675,18 +1752,29 @@ ec_obj_update(tse_task_t *task, daos_oclass_attr_t *oca)
 				unsigned int sgl_j = 0;
 				size_t sgl_k = 0;
 				for (j = 0; j < args->iods[i].iod_nr; j++) {
-		   		     rc = ec_array_encode(params,
-							  &args->iods[i],
-							  &args->sgls[i], oca,
-							  j, &sgl_j, &sgl_k);
+					D_INFO("encode - start: %lu, length: %lu\n",
+						args->iods[i].iod_recxs[j].rx_idx,
+						args->iods[i].iod_recxs[j].rx_nr);
+		   			rc = ec_array_encode(params,
+							     &args->iods[i],
+							     &args->sgls[i], oca,
+							     j, &sgl_j, &sgl_k);
 				     if (rc != 0)
 					break;
 				}
 				rc = ec_update_params(params, &args->iods[i],
 						      &args->sgls[i],
 						      oca->u.ec.e_cell_size);
+				D_INFO("ec_updated params: %d\n", i);
 				head->iods[i] = params->niod;
+				for (j = 0; j < head->iods[i].iod_nr; j++ )
+					D_INFO("update - start: %lu, length: %lu\n",
+						head->iods[i].iod_recxs[j].rx_idx,
+						head->iods[i].iod_recxs[j].rx_nr);
+						
 				head->sgls[i] = params->nsgl;
+				D_ASSERT(head->nr == i);
+				head->nr++;
 			} else {
 				D_ASSERT(args->iods[i].iod_type ==
 					 DAOS_IOD_SINGLE &&
@@ -1695,13 +1783,18 @@ ec_obj_update(tse_task_t *task, daos_oclass_attr_t *oca)
 					 oca->u.ec.e_data_cells);
 				/* Encode single value */
 			}
-		} else if (head != NULL && &(head->sgls[i]) == NULL) {
+		} else if (head != NULL && &(head->sgls[i]) != NULL) {
+			D_INFO("no full stripe, I guess\n");
 			/* Add sgls[i] and iods[i] to head. Since we're 
 			 * adding ec parity (head != NULL) and thus need to
 			 * replace the arrays in the update struct.
 			 */
 			head->iods[i] = args->iods[i];
 			head->sgls[i] = args->sgls[i];
+			D_ASSERT(head->nr == i);
+			head->nr++;
+		} else {
+			D_INFO("no full stripe but head is null, I guess\n");
 		}
 	}
 	if (rc != 0 && head != NULL) {
@@ -1710,6 +1803,7 @@ ec_obj_update(tse_task_t *task, daos_oclass_attr_t *oca)
 		while (head != NULL) {
 			current = head;
 			D_FREE(current->niod.iod_recxs);
+			D_FREE(current->nsgl.sg_iovs);
 			for (i = 0; i < current->p_segs.nr; i++)
 				D_FREE(current->p_segs.p_bufs[i]);
 			D_FREE(current->p_segs.p_bufs);
@@ -1722,6 +1816,8 @@ ec_obj_update(tse_task_t *task, daos_oclass_attr_t *oca)
 		tse_task_register_comp_cb(task, free_ec_params_cb, &head,
 					  sizeof(head));
 	}
+	if (rc)
+		D_INFO("ec_update error: %d\n", rc);
 	return rc;
 }
 
@@ -1734,10 +1830,12 @@ dc_obj_update(tse_task_t *task)
 	struct dc_object	*obj;
 	d_list_t		*head = NULL;
 	unsigned int		shard;
+	unsigned int		start_shard;
 	unsigned int		shards_cnt;
 	unsigned int		map_ver;
 	uint64_t		dkey_hash;
 	daos_epoch_t		epoch;
+	uint64_t		tgt_set = 0;
 	int			i;
 	int			rc;
 
@@ -1759,10 +1857,20 @@ dc_obj_update(tse_task_t *task)
 
 	struct daos_oclass_attr *oca = daos_oclass_attr_find(obj->cob_md.omd_id);
 	if (oca->ca_resil == DAOS_RES_EC) {
-		rc = ec_obj_update(task, oca);
+
+		D_INFO("EC object update\n");
+		rc = ec_obj_update(task, oca, &tgt_set);
+		D_INFO("EC object updated, tgt_set: %lu\n", tgt_set);
 		if (rc != 0) {
 			goto out_task;
 		}
+		if ( tgt_set ) {
+			tgt_set = 0;
+		} else {
+			D_INFO("Init target set\n");
+			ec_init_tgt_set(args->iods, args->nr, oca, &tgt_set);
+		}
+		D_INFO("tgt_set: %lu\n", tgt_set);
 	}
 
 	obj_auxi = tse_task_stack_push(task, sizeof(*obj_auxi));
@@ -1783,12 +1891,14 @@ dc_obj_update(tse_task_t *task)
 	dkey_hash = obj_dkey2hash(args->dkey);
 	rc = obj_dkeyhash2update_grp(obj, dkey_hash, map_ver, &shard,
 				     &shards_cnt);
+	start_shard = shard;
+
 	if (rc != 0)
 		goto out_task;
 
 	D_DEBUG(DB_IO, "update "DF_OID" start %u cnt %u\n",
 		DP_OID(obj->cob_md.omd_id), shard, shards_cnt);
-	rc = obj_shards_2_fwtgts(obj, map_ver, &shard, &shards_cnt,
+	rc = obj_shards_2_fwtgts(obj, map_ver, tgt_set, &shard, &shards_cnt,
 				 &obj_auxi->fw_shard_tgts, &obj_auxi->fw_cnt);
 	if (rc != 0) {
 		D_ERROR("update "DF_OID", obj_shards_2_fwtgts failed %d.\n",
@@ -1822,6 +1932,7 @@ dc_obj_update(tse_task_t *task)
 		shard_arg->sgls			= args->sgls;
 		shard_arg->auxi.map_ver		= map_ver;
 		shard_arg->auxi.shard		= shard;
+		shard_arg->auxi.start_shard	= start_shard;
 		shard_arg->auxi.target		= obj_shard2tgtid(obj, shard);
 		shard_arg->auxi.obj		= obj;
 		shard_arg->auxi.obj_auxi	= obj_auxi;
@@ -2122,7 +2233,7 @@ obj_punch_internal(tse_task_t *api_task, enum obj_rpc_opc opc,
 	}
 	D_DEBUG(DB_IO, "punch "DF_OID" start %u cnt %u\n",
 		DP_OID(obj->cob_md.omd_id), shard_first, shard_nr);
-	rc = obj_shards_2_fwtgts(obj, map_ver, &shard_first, &shard_nr,
+	rc = obj_shards_2_fwtgts(obj, map_ver, 0UL, &shard_first, &shard_nr,
 				 &obj_auxi->fw_shard_tgts, &obj_auxi->fw_cnt);
 	if (rc != 0) {
 		D_ERROR("punch "DF_OID", obj_shards_2_fwtgts failed %d.\n",

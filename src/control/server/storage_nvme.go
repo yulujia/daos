@@ -224,6 +224,13 @@ func (n *nvmeStorage) Discover(resp *pb.ScanStorageResp) {
 		return
 	}
 
+	if n.config.NvmeShmID == 0 {
+		resp.Nvmestate = addStateDiscover(
+			pb.ResponseStatus_CTRL_ERR_NVME,
+			"missing shm_id, skipping nvme discovery", "")
+		return
+	}
+
 	// specify shmID to be set as opt in SPDK env init
 	if err := n.env.InitSPDKEnv(n.config.NvmeShmID); err != nil {
 		resp.Nvmestate = addStateDiscover(

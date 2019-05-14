@@ -108,7 +108,8 @@ func loadConfigOpts(cliOpts *cliOptions, host string) (
 	log.Debugf("DAOS config read from %s", config.Path)
 
 	// get unique identifier to activate SPDK multiprocess mode
-	config.NvmeShmID = hash(host + strconv.Itoa(os.Getpid()))
+	// TODO: re-enable
+	//config.NvmeShmID = hash(host + strconv.Itoa(os.Getpid()))
 
 	if err = config.getIOParams(cliOpts); err != nil {
 		return config, errors.Wrap(

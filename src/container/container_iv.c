@@ -246,7 +246,7 @@ cont_iv_snap_ent_fetch(struct ds_iv_entry *entry, struct ds_iv_key *key)
 	d_iov_t			key_iov;
 	d_iov_t			val_iov;
 	daos_epoch_t		*snaps = NULL;
-	int			snap_cnt = 0;
+	int			snap_cnt = MAX_SNAP_CNT;
 	int			rc;
 
 	rc = ds_cont_get_snapshots(entry->ns->iv_pool_uuid,
@@ -273,9 +273,8 @@ cont_iv_snap_ent_fetch(struct ds_iv_entry *entry, struct ds_iv_key *key)
 out:
 	if (iv_entry != NULL)
 		D_FREE(iv_entry);
-	if (snaps != NULL)
+	if (snaps)
 		D_FREE(snaps);
-
 	return rc;
 }
 
@@ -304,7 +303,8 @@ again:
 			class_id = entry->iv_class->iv_class_id;
 			if (class_id == IV_CONT_SNAP) {
 				rc = cont_iv_snap_ent_fetch(entry, key);
-				goto again;
+				if (rc == 0)
+					goto again;
 			} else if (class_id == IV_CONT_CAPA ||
 				   class_id == IV_CONT_PROP) {
 				/* Can not find the handle on leader */
@@ -505,6 +505,22 @@ cont_iv_update(void *ns, int class_id, uuid_t key_uuid,
 	rc = ds_iv_update(ns, &key, &sgl, shortcut, sync_mode, 0);
 	if (rc)
 		D_ERROR(DF_UUID" iv update failed %d\n", DP_UUID(key_uuid), rc);
+
+	return rc;
+}
+
+int
+cont_iv_snapshot_invalidate(void *ns, unsigned int shortcut,
+			    unsigned int sync_mode)
+{
+	struct ds_iv_key	key = { 0 };
+	int			rc;
+
+	D_ASSERT(dss_get_module_info()->dmi_xs_id == 0);
+	key.class_id = IV_CONT_SNAP;
+	rc = ds_iv_invalidate(ns, &key, shortcut, sync_mode, 0);
+	if (rc)
+		D_ERROR("iv invalidate failed %d\n", rc);
 
 	return rc;
 }

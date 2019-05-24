@@ -1328,6 +1328,7 @@ ds_iter_vos(crt_rpc_t *rpc, struct vos_iter_anchors *anchors,
 		param.ip_epc_expr = VOS_IT_EPC_RE;
 		recursive = true;
 		enum_arg->chk_key2big = true;
+		param.ip_flags = VOS_IT_RECX_VISIBLE;
 	}
 
 	/*

@@ -146,16 +146,16 @@ rebuild_io_obj_internal(struct ioreq *req, bool validate, daos_epoch_t eph,
 #define BULK_SIZE	5000
 #define REC_SIZE	64
 #define LARGE_KEY_SIZE	(512 * 1024)
-#define DKEY_LOOP	3
-#define AKEY_LOOP	3
+#define DKEY_LOOP	4	
+#define AKEY_LOOP	4	
 #define REC_LOOP	10
 	char	dkey[32];
 	char	akey[32];
 	char	data[REC_SIZE];
 	char	data_verify[REC_SIZE];
 	char	*large_key;
-	int	akey_punch_idx = 1;
-	int	dkey_punch_idx = 1;
+	int	akey_punch_idx = 2;
+	int	dkey_punch_idx = 2;
 	int	rec_punch_idx = 2;
 	int	j;
 	int	k;
@@ -288,10 +288,13 @@ rebuild_io(test_arg_t *arg, daos_obj_id_t *oids, int oids_nr)
 	for (i = 0; i < oids_nr; i++) {
 		ioreq_init(&req, arg->coh, oids[i], DAOS_IOD_ARRAY, arg);
 		if (i == punch_idx) {
+			daos_epoch_t snap_epoch;
+
+			daos_cont_create_snap(arg->coh, &snap_epoch, NULL, NULL);
 			punch_obj(DAOS_TX_NONE, &req);
 		} else {
-			rebuild_io_obj_internal((&req), false, eph, -1,
-						 arg->index);
+			rebuild_io_obj_internal((&req), false, eph,
+						-1, arg->index);
 		}
 		ioreq_fini(&req);
 	}
@@ -319,9 +322,8 @@ rebuild_io_validate(test_arg_t *arg, daos_obj_id_t *oids, int oids_nr,
 			/* how to validate punch object XXX */
 			if (j != punch_idx)
 				/* Validate eph data */
-				rebuild_io_obj_internal((&req), true, eph, eph,
-							arg->index);
-
+				rebuild_io_obj_internal((&req), true, eph,
+							eph, arg->index);
 			ioreq_fini(&req);
 		}
 	}

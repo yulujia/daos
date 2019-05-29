@@ -370,6 +370,8 @@ struct vos_obj_df {
 	daos_epoch_t			vo_sync;
 	/** Attributes of object.  See vos_oi_attr */
 	uint64_t			vo_oi_attr;
+	/** Incarnation log for object */
+	struct ilog_df			vo_ilog;
 	/** Latest known update timestamp or punched timestamp */
 	daos_epoch_t			vo_latest;
 	/** Earliest known update timestamp */

@@ -83,6 +83,7 @@ obj_lop_alloc(void *key, unsigned int ksize, void *args,
 	obj->obj_id	= lkey->olk_oid;
 	obj->obj_cont	= cont;
 	vos_cont_addref(cont);
+	ilog_fetch_init(&obj->obj_ilog_cache);
 
 	*llink_p = &obj->obj_llink;
 	rc = 0;
@@ -111,6 +112,7 @@ obj_lop_free(struct daos_llink *llink)
 	D_DEBUG(DB_TRACE, "lru free callback for vos_obj_cache\n");
 
 	obj = container_of(llink, struct vos_object, obj_llink);
+	ilog_fetch_finish(&obj->obj_ilog_cache);
 	if (obj->obj_cont != NULL)
 		vos_cont_decref(obj->obj_cont);
 
@@ -221,8 +223,6 @@ vos_obj_hold(struct daos_lru_cache *occ, struct vos_container *cont,
 			D_GOTO(failed, rc);
 
 		obj = container_of(lret, struct vos_object, obj_llink);
-		if (obj->obj_epoch == 0) /* new cache element */
-			obj->obj_epoch = epoch;
 
 		if (intent == DAOS_INTENT_KILL) {
 			if (!obj->obj_df) /* new object, nothing to delete */
@@ -284,7 +284,7 @@ vos_obj_hold(struct daos_lru_cache *occ, struct vos_container *cont,
 		no_create ? "find" : "find/create", DP_UOID(oid), epoch);
 
 	if (no_create) {
-		rc = vos_oi_find(cont, oid, epoch, intent, &obj->obj_df);
+		rc = vos_oi_find(cont, oid, 0, 0, &obj->obj_df);
 		if (rc == -DER_NONEXIST) {
 			D_DEBUG(DB_TRACE, "non exist oid "DF_UOID"\n",
 				DP_UOID(oid));
@@ -294,7 +294,7 @@ vos_obj_hold(struct daos_lru_cache *occ, struct vos_container *cont,
 			obj->obj_sync_epoch = obj->obj_df->vo_sync;
 		}
 	} else {
-		rc = vos_oi_find_alloc(cont, oid, epoch, intent, &obj->obj_df);
+		rc = vos_oi_find_alloc(cont, oid, 0, 0, &obj->obj_df);
 		D_ASSERT(rc || obj->obj_df);
 	}
 

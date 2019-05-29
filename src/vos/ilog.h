@@ -85,11 +85,12 @@ ilog_set_callbacks(const struct ilog_callbacks *cbs);
  *
  *  \param	umm[IN]		The umem instance
  *  \param	root[IN]	A pointer to the allocated root
+ *  \param	versioned[IN]	Track tree changes for ilog_version
  *
  *  \return 0 on success, error code on failure
  */
 int
-ilog_create(struct umem_instance *umm, struct ilog_df *root);
+ilog_create(struct umem_instance *umm, struct ilog_df *root, bool versioned);
 
 /** Open an existing incarnation log in place and create a handle to
  *  access it.
@@ -198,7 +199,8 @@ struct ilog_entries {
  *
  *  \param	entries[in]	Allocated structure where entries are stored
  */
-void ilog_fetch_init(struct ilog_entries *entries);
+void
+ilog_fetch_init(struct ilog_entries *entries);
 
 /** Fetch the ilog within the epr range
  *
@@ -210,14 +212,25 @@ void ilog_fetch_init(struct ilog_entries *entries);
  *
  *  \return 0 on success, error code on failure
  */
-int ilog_fetch(daos_handle_t loh, uint32_t intent,
-	       const daos_epoch_range_t *epr, struct ilog_entries *entries);
+int
+ilog_fetch(daos_handle_t loh, uint32_t intent,
+	   const daos_epoch_range_t *epr, struct ilog_entries *entries);
 
 /** Deallocate any memory associated with an ilog_entries struct for fetch
  *
  *  \param	entries[in]	Allocated structure to be finalized
  */
-void ilog_fetch_finish(struct ilog_entries *entries);
+void
+ilog_fetch_finish(struct ilog_entries *entries);
+
+/** Retrieve the modification version of the incarnation log
+ *
+ *  \param	ilog[in]	The incarnation log df
+ *
+ *  \return 0 on success, < 0 error, version otherwise
+ */
+int32_t
+ilog_version(struct ilog_df *ilog);
 
 /** Iterator for fetched incarnation log entries
  *

@@ -54,11 +54,13 @@ struct vos_object {
 	daos_handle_t			obj_toh;
 	/** btree iterator handle */
 	daos_handle_t			obj_ih;
+	/** Cache of the incarnation log */
+	struct ilog_entries		obj_ilog_cache;
 	/** epoch when the object(cache) is initialized */
 	daos_epoch_t			obj_epoch;
 	/** The latest sync epoch */
 	daos_epoch_t			obj_sync_epoch;
-	/** cached vos_obj_df::vo_incarnation, for revalidation. */
+	/** Object incarnation */
 	uint32_t			obj_incarnation;
 	/** nobody should access this object */
 	bool				obj_zombie;
@@ -187,7 +189,8 @@ vos_oi_find_alloc(struct vos_container *cont, daos_unit_oid_t oid,
  */
 int
 vos_oi_find(struct vos_container *cont, daos_unit_oid_t oid,
-	    daos_epoch_t epoch, uint32_t intent, struct vos_obj_df **obj);
+	    daos_epoch_t epoch, uint32_t intent,
+	    struct vos_obj_df **obj);
 
 /**
  * Punch an object from the OI table

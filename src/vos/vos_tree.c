@@ -326,7 +326,7 @@ ktr_rec_alloc(struct btr_instance *tins, d_iov_t *key_iov,
 		return -DER_NOSPACE;
 
 	krec = vos_rec2krec(tins, rec);
-	rc = ilog_create(&tins->ti_umm, &krec->kr_ilog);
+	rc = ilog_create(&tins->ti_umm, &krec->kr_ilog, false);
 	if (rc != 0) {
 		D_ERROR("Failure to create incarnation log\n");
 		return rc;
@@ -359,7 +359,6 @@ ktr_rec_free(struct btr_instance *tins, struct btr_record *rec, void *args)
 	rc = ilog_destroy(&tins->ti_umm, &krec->kr_ilog);
 	if (rc != 0)
 		return rc;
-
 
 	if (krec->kr_dtx_shares > 0) {
 		D_ERROR("There are some unknown DTXs (%d) share the key rec\n",

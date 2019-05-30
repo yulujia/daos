@@ -1492,8 +1492,9 @@ out:
 int
 ring_obj_find_reint(struct pl_map *map, struct daos_obj_md *md,
 		    struct daos_obj_shard_md *shard_md,
-		    struct pl_target_grp *tgp_reint,
-		    uint32_t *tgt_reint)
+		    uint32_t rebuild_ver, uint32_t *tgt_id,
+		    uint32_t *shard_idx, unsigned int array_size,
+		    int myrank)
 {
 	D_ERROR("Unsupported\n");
 	return -DER_NOSYS;

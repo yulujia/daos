@@ -127,11 +127,30 @@ int pl_obj_find_rebuild(struct pl_map *map,
 			uint32_t *shard_id, unsigned int array_size,
 			int myrank);
 
-int pl_obj_find_reint(struct pl_map *map,
-		      struct daos_obj_md *md,
-		      struct daos_obj_shard_md *shard_md,
-		      struct pl_target_grp *tgp_recov,
-		      uint32_t *tgt_reint);
+/**
+ * Check if the provided object has any shard needs to be rebuilt on an added /
+ * reintegrated target (i.e. those in UP state) given rebuild version
+ * @rebuild_ver.
+ *
+ * \param  map [IN]		pl_map this check is performed on
+ * \param  md  [IN]		object metadata
+ * \param  shard_md [IN]	shard metadata (optional)
+ * \param  rebuild_ver [IN]	current rebuild version
+ * \param  tgt_rank [OUT]	array of rebuild target ranks
+ * \param  shard_id [OUT]	array of shard ids to be rebuilt
+ * \param  array_size [IN]	array size of tgt_rank & shard_id
+ * \prarm  myrank [IN]		rank of current server in communication group
+
+ * \return	> 0	the array size of tgt_rank & shard_id, so it means
+ *                      getting the spare targets for the failure shards.
+ *		0	No need rebuild or find spare tgts successfully.
+ *		-ve	error code.
+ */
+int
+pl_obj_find_reint(struct pl_map *map, struct daos_obj_md *md,
+		  struct daos_obj_shard_md *shard_md,
+		  uint32_t rebuild_ver, uint32_t *tgt_rank,
+		  uint32_t *shard_id, unsigned int array_size, int myrank);
 
 typedef struct pl_obj_shard *(*pl_get_shard_t)(void *data, int idx);
 

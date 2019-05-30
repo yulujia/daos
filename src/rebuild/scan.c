@@ -491,8 +491,11 @@ out:
 }
 
 /**
- * The rebuild objects will be gathered into a global objects arrary by
+ * The rebuild objects will be gathered into a global objects array by
  * target id.
+ *
+ * This groups the updates for each individual target into REBUILD_SEND_LIMIT
+ * size batches before sending them to each target.
  **/
 static int
 rebuild_object_insert(struct rebuild_scan_arg *arg, unsigned int tgt_id,
@@ -511,7 +514,7 @@ rebuild_object_insert(struct rebuild_scan_arg *arg, unsigned int tgt_id,
 	ABT_mutex_lock(arg->scan_lock);
 	rc = dbtree_lookup(toh, &key_iov, &val_iov);
 	if (rc < 0) {
-		/* Try to find the target rebuild tree */
+		/* Don't have a tree for this target - create one */
 		rc = rebuild_tgt_tree_create(toh, tgt_id, &tgt_root);
 		if (rc) {
 			ABT_mutex_unlock(arg->scan_lock);
@@ -619,7 +622,45 @@ placement_check(uuid_t co_uuid, vos_iter_entry_t *ent, void *data)
 			if (rc)
 				D_GOTO(out, rc);
 		} else {
-			D_DEBUG(DB_REBUILD, "skip "DF_UOID".\n", DP_UOID(oid));
+			D_DEBUG(DB_REBUILD, "rebuild skip "DF_UOID".\n",
+				DP_UOID(oid));
+			rc = 0;
+		}
+	}
+
+	rebuild_nr = pl_obj_find_reint(map, &md, NULL, rpt->rt_rebuild_ver,
+				       tgts, shards, arg->rebuild_tgt_nr,
+				       myrank);
+	if (rebuild_nr <= 0) /* No need rebuild */
+		D_GOTO(out, rc = rebuild_nr);
+
+	D_ASSERT(rebuild_nr <= arg->rebuild_tgt_nr);
+	for (i = 0; i < rebuild_nr; i++) {
+		D_DEBUG(DB_REBUILD, "reint obj "DF_UOID"/"DF_UUID"/"DF_UUID
+			" on %d for shard %d\n", DP_UOID(oid), DP_UUID(co_uuid),
+			DP_UUID(rpt->rt_pool_uuid), tgts[i], shards[i]);
+
+		struct pool_target *target;
+
+		rc = pool_map_find_target(map->pl_poolmap, tgts[i], &target);
+		D_ASSERT(rc == 1);
+
+		/* During rebuild test, it will manually exclude some target to
+		 * trigger the rebuild, then later add it back, so some objects
+		 * might exist on some illegal target, so they might use its
+		 * "own" target as the spare target, let's skip these object
+		 * now. When we have better support from CART exclude/addback,
+		 * myrank should always not equal to tgt_rebuild. XXX
+		 */
+		if (myrank != target->ta_comp.co_rank) {
+			rc = rebuild_object_insert(arg, tgts[i], shards[i],
+						   rpt->rt_pool_uuid, co_uuid,
+						   oid, ent->ie_epoch);
+			if (rc)
+				D_GOTO(out, rc);
+		} else {
+			D_DEBUG(DB_REBUILD, "reint skip "DF_UOID".\n",
+				DP_UOID(oid));
 			rc = 0;
 		}
 	}

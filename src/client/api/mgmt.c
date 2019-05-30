@@ -38,6 +38,7 @@ daos_mgmt_svc_rip(const char *grp, d_rank_t rank, bool force,
 	int			 rc;
 
 	DAOS_API_ARG_ASSERT(*args, SVC_RIP);
+
 	rc = dc_task_create(dc_mgmt_svc_rip, NULL, ev, &task);
 	if (rc)
 		return rc;
@@ -59,6 +60,7 @@ daos_mgmt_set_params(const char *grp, d_rank_t rank, unsigned int key_id,
 	int			 rc;
 
 	DAOS_API_ARG_ASSERT(*args, SET_PARAMS);
+
 	rc = dc_task_create(dc_mgmt_set_params, NULL, ev, &task);
 	if (rc)
 		return rc;
@@ -103,6 +105,7 @@ daos_pool_create(uint32_t mode, uid_t uid, gid_t gid, const char *grp,
 	int			 rc;
 
 	DAOS_API_ARG_ASSERT(*args, POOL_CREATE);
+
 	if (!valid_pool_create_mode(mode)) {
 		D_ERROR("Invalid pool creation mode (%o).\n", mode);
 		return -DER_INVAL;
@@ -141,6 +144,7 @@ daos_pool_destroy(const uuid_t uuid, const char *grp, int force,
 	int			 rc;
 
 	DAOS_API_ARG_ASSERT(*args, POOL_DESTROY);
+
 	rc = dc_task_create(dc_pool_destroy, NULL, ev, &task);
 	if (rc)
 		return rc;
@@ -162,6 +166,7 @@ daos_pool_evict(const uuid_t uuid, const char *grp, const d_rank_list_t *svc,
 	int			 rc;
 
 	DAOS_API_ARG_ASSERT(*args, POOL_EVICT);
+
 	rc = dc_task_create(dc_pool_evict, NULL, ev, &task);
 	if (rc)
 		return rc;
@@ -182,6 +187,8 @@ daos_pool_add_tgt(const uuid_t uuid, const char *grp,
 	daos_pool_update_t	*args;
 	tse_task_t		*task;
 	int			 rc;
+
+	DAOS_API_ARG_ASSERT(*args, POOL_ADD);
 
 	rc = dc_task_create(dc_pool_add, NULL, ev, &task);
 	if (rc)
@@ -204,6 +211,8 @@ daos_pool_tgt_exclude_out(const uuid_t uuid, const char *grp,
 	daos_pool_update_t	*args;
 	tse_task_t		*task;
 	int			 rc;
+
+	DAOS_API_ARG_ASSERT(*args, POOL_EXCLUDE_OUT);
 
 	rc = dc_task_create(dc_pool_exclude_out, NULL, ev, &task);
 	if (rc)

@@ -259,6 +259,7 @@ destroy_hdlr(int argc, char *argv[])
 enum pool_op {
 	POOL_EVICT,
 	POOL_EXCLUDE,
+	POOL_ADD_TGT,
 	POOL_QUERY,
 	REPLICA_ADD,
 	REPLICA_DEL
@@ -271,6 +272,8 @@ pool_op_parse(const char *str)
 		return POOL_EVICT;
 	else if (strcmp(str, "exclude") == 0)
 		return POOL_EXCLUDE;
+	else if (strcmp(str, "include") == 0)
+		return POOL_ADD_TGT;
 	else if (strcmp(str, "query") == 0)
 		return POOL_QUERY;
 	else if (strcmp(str, "add") == 0)
@@ -361,9 +364,13 @@ pool_op_hdlr(int argc, char *argv[])
 		}
 	}
 
-	/* Check the ranks for POOL_EXCLUDE, REPLICA_ADD & REPLICA_DEL. */
+	/*
+	 * Check the ranks for POOL_EXCLUDE, POOL_ADD_TGT, REPLICA_ADD,
+	 * & REPLICA_DEL.
+	 */
 	if (ranks == NULL &&
-	    (op == POOL_EXCLUDE || op == REPLICA_ADD || op == REPLICA_DEL)) {
+	    (op == POOL_EXCLUDE || op == REPLICA_ADD || op == REPLICA_DEL ||
+	     op == POOL_ADD_TGT)) {
 		fprintf(stderr, "valid target ranks required\n");
 		d_rank_list_free(svc);
 		return 2;
@@ -398,18 +405,34 @@ pool_op_hdlr(int argc, char *argv[])
 		}
 
 		rc = daos_pool_tgt_exclude(pool_uuid, group, svc, &tgt_list,
+					   NULL /* ev */);
+		if (rc != 0)
+			fprintf(stderr, "failed to exclude target: %d\n", rc);
+		break;
+
+	case POOL_ADD_TGT:
+		/* Only support add single target XXX */
+		D_ASSERT(ranks->rl_nr == 1);
+		tgt_list.tl_nr = 1;
+		tgt_list.tl_ranks = ranks->rl_ranks;
+		if (targets != NULL) {
+			D_ASSERT(targets->rl_nr == 1);
+			tgt_list.tl_tgts = (int *)targets->rl_ranks;
+		} else {
+			tgt_list.tl_tgts = &tgt;
+		}
+
+		rc = daos_pool_add_tgt(pool_uuid, group, svc, &tgt_list,
 				       NULL /* ev */);
 		if (rc != 0)
-			fprintf(stderr, "failed to exclude target: "
-					"%d\n", rc);
+			fprintf(stderr, "failed to add target: %d\n", rc);
 		break;
 
 	case REPLICA_ADD:
 		rc = daos_pool_add_replicas(pool_uuid, group, svc, ranks,
 					    NULL /* failed */, NULL /* ev */);
 		if (rc != 0)
-			fprintf(stderr, "failed to add replicas: "
-					"%d\n", rc);
+			fprintf(stderr, "failed to add replicas: %d\n", rc);
 		break;
 
 	case REPLICA_DEL:
@@ -835,75 +858,75 @@ out:
 static int
 help_hdlr(int argc, char *argv[])
 {
-	printf("\
-usage: dmg COMMAND [OPTIONS]\n\
-commands:\n\
-  create	create a pool\n\
-  destroy	destroy a pool\n\
-  evict		evict all pool connections to a pool\n\
-  exclude	exclude a target from a pool\n\
-  add		add a replica to a pool service\n\
-  remove	remove a replica from a pool service\n\
-  kill		kill remote daos server\n\
-  query		query pool information\n\
-  layout	get object layout\n\
-  help		print this message and exit\n");
-	printf("\
-create options:\n\
-  --gid=GID	pool GID (getegid()) \n\
-  --group=STR	pool server process group (\"%s\")\n\
-  --mode=MODE	pool mode (%#o)\n\
-  --size=BYTES	target SCM size in bytes (%s)\n\
-		supports K (KB), M (MB), G (GB), T (TB) and P (PB) suffixes\n\
-  --nvme=BYTES	target NVMe size in bytes (%s)\n\
-  --svcn=N	number of pool service replicas (\"%u\")\n\
-  --target=N	pool targets on server like 0:1:2:3:4 (whole group)\n\
-  --uid=UID	pool UID (geteuid())\n", default_group, default_mode,
-	       default_scm_size, default_nvme_size, default_svc_nreplicas);
-	printf("\
-destroy options:\n\
-  --force	destroy the pool even if there are connections\n\
-  --group=STR	pool server process group (\"%s\")\n\
-  --pool=UUID	pool UUID\n", default_group);
-	printf("\
-evict options:\n\
-  --group=STR	pool server process group (\"%s\")\n\
-  --pool=UUID	pool UUID\n\
-  --svc=RANKS	pool service replicas like 1:2:3\n", default_group);
-	printf("\
-exclude options:\n\
-  --group=STR	pool server process group (\"%s\")\n\
-  --pool=UUID	pool UUID\n\
-  --svc=RANKS	pool service replicas like 1:2:3\n\
-  --rank=N	storage server rank \n\
-  --target=RANK	target rank\n", default_group);
-	printf("\
-add options:\n\
-  --group=STR	pool server process group (\"%s\")\n\
-  --pool=UUID	pool UUID\n\
-  --svc=RANKS	pool service replicas like 1:2:3\n\
-  --target=RANK	target rank\n", default_group);
-	printf("\
-remove options:\n\
-  --group=STR	pool server process group (\"%s\")\n\
-  --pool=UUID	pool UUID\n\
-  --svc=RANKS	pool service replicas like 1:2:3\n\
-  --target=RANK	target rank\n", default_group);
-	printf("\
-kill options:\n\
-  --group=STR	pool server process group (\"%s\")\n\
-  --force	unclean shutdown\n\
-  --rank=INT	rank of the DAOS server to kill\n", default_group);
-	printf("\
-query options:\n\
-  --group=STR	pool server process group (\"%s\")\n\
-  --pool=UUID	pool UUID\n\
-  --svc=RANKS	pool service replicas like 1:2:3\n", default_group);
-	printf("\
-query obj layout options: \n\
-  --pool=UUID	pool uuid\n\
-  --cont=UUID	container uuid\n\
-  --oid=oid	object oid.\n");
+	printf("usage: dmg COMMAND [OPTIONS]\n"
+	       "commands:\n"
+	       "  create	create a pool\n"
+	       "  destroy	destroy a pool\n"
+	       "  evict		evict all pool connections to a pool\n"
+	       "  exclude	exclude a target from a pool\n"
+	       "  include	include (add or reintegrate) a target into a pool\n"
+	       "  add		add a replica to a pool service\n"
+	       "  remove	remove a replica from a pool service\n"
+	       "  kill		kill remote daos server\n"
+	       "  query		query pool information\n"
+	       "  layout	get object layout\n"
+	       "  help		print this message and exit\n");
+	printf("create options:\n"
+	       "  --gid=GID	pool GID (getegid())\n"
+	       "  --group=STR	pool server process group (\"%s\")\n"
+	       "  --mode=MODE	pool mode (%#o)\n"
+	       "  --size=BYTES	target SCM size in bytes (%s)\n"
+	       "		supports K (KB), M (MB), G (GB), T (TB) and P (PB) suffixes\n"
+	       "  --nvme=BYTES	target NVMe size in bytes (%s)\n"
+	       "  --svcn=N	number of pool service replicas (\"%u\")\n"
+	       "  --target=N	pool targets on server like 0:1:2:3:4 (whole group)\n"
+	       "  --uid=UID	pool UID (geteuid())\n",
+	       default_group, default_mode, default_scm_size, default_nvme_size,
+	       default_svc_nreplicas);
+	printf("destroy options:\n"
+	       "  --force	destroy the pool even if there are connections\n"
+	       "  --group=STR	pool server process group (\"%s\")\n"
+	       "  --pool=UUID	pool UUID\n", default_group);
+	printf("evict options:\n"
+	       "  --group=STR	pool server process group (\"%s\")\n"
+	       "  --pool=UUID	pool UUID\n"
+	       "  --svc=RANKS	pool service replicas like 1:2:3\n",
+	       default_group);
+	printf("exclude options:\n"
+	       "  --group=STR	pool server process group (\"%s\")\n"
+	       "  --pool=UUID	pool UUID\n"
+	       "  --svc=RANKS	pool service replicas like 1:2:3\n"
+	       "  --rank=N	storage server rank\n"
+	       "  --target=RANK	target rank\n", default_group);
+	printf("include options:\n"
+	       "  --group=STR	pool server process group (\"%s\")\n"
+	       "  --pool=UUID	pool UUID\n"
+	       "  --svc=RANKS	pool service replicas like 1:2:3\n"
+	       "  --target=RANK	target rank\n", default_group);
+	printf("add options:\n"
+	       "  --group=STR	pool server process group (\"%s\")\n"
+	       "  --pool=UUID	pool UUID\n"
+	       "  --svc=RANKS	pool service replicas like 1:2:3\n"
+	       "  --target=RANK	target rank\n", default_group);
+	printf("remove options:\n"
+	       "  --group=STR	pool server process group (\"%s\")\n"
+	       "  --pool=UUID	pool UUID\n"
+	       "  --svc=RANKS	pool service replicas like 1:2:3\n"
+	       "  --target=RANK	target rank\n", default_group);
+	printf("kill options:\n"
+	       "  --group=STR	pool server process group (\"%s\")\n"
+	       "  --force	unclean shutdown\n"
+	       "  --rank=INT	rank of the DAOS server to kill\n",
+	       default_group);
+	printf("query options:\n"
+	       "  --group=STR	pool server process group (\"%s\")\n"
+	       "  --pool=UUID	pool UUID\n"
+	       "  --svc=RANKS	pool service replicas like 1:2:3\n",
+	       default_group);
+	printf("query obj layout options:\n"
+	       "  --pool=UUID	pool uuid\n"
+	       "  --cont=UUID	container uuid\n"
+	       "  --oid=oid	object oid.\n");
 	return 0;
 }
 
@@ -922,6 +945,8 @@ main(int argc, char *argv[])
 	else if (strcmp(argv[1], "evict") == 0)
 		hdlr = pool_op_hdlr;
 	else if (strcmp(argv[1], "exclude") == 0)
+		hdlr = pool_op_hdlr;
+	else if (strcmp(argv[1], "include") == 0)
 		hdlr = pool_op_hdlr;
 	else if (strcmp(argv[1], "add") == 0)
 		hdlr = pool_op_hdlr;

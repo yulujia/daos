@@ -28,6 +28,7 @@
 #define __DAOS_SRV_REBUILD_H__
 
 #include <daos_types.h>
+#include <daos_srv/pool.h>
 
 #define REBUILD_ENV            "DAOS_REBUILD"
 #define REBUILD_ENV_DISABLED   "no"
@@ -37,6 +38,7 @@ bool is_rebuild_pool(uuid_t pool_uuid, uuid_t poh_uuid);
 
 int ds_rebuild_schedule(const uuid_t uuid, uint32_t map_ver,
 			struct pool_target_id_list *tgts_failed,
+			struct pool_target_id_list *tgts_added,
 			d_rank_list_t *svc_list);
 int ds_rebuild_query(uuid_t pool_uuid,
 		     struct daos_rebuild_status *status);

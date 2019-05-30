@@ -31,7 +31,7 @@
 
 /** All tests in default order (tests that kill nodes must be last) */
 static const char *all_tests = "mpceiACoROdr";
-static const char *all_tests_defined = "mpceixACoROdr";
+static const char *all_tests_defined = "mpceixACoROdrt";
 
 static void
 print_usage(int rank)
@@ -53,6 +53,7 @@ print_usage(int rank)
 	print_message("daos_test -o|--daos_epoch_recovery_tests\n");
 	print_message("daos_test -O|--oid_alloc\n");
 	print_message("daos_test -r|--rebuild\n");
+	print_message("daos_test -t|--reintegration\n");
 	print_message("daos_test -a|--daos_all_tests\n");
 	print_message("daos_test -g|--group GROUP\n");
 	print_message("daos_test -s|--svcn NSVCREPLICAS\n");
@@ -154,6 +155,14 @@ run_specified_tests(const char *tests, int rank, int size,
 							   sub_tests,
 							   sub_tests_size);
 			break;
+		case 't':
+			daos_test_print(rank, "\n\n=================");
+			daos_test_print(rank, "DAOS reintegration tests..");
+			daos_test_print(rank, "=================");
+			nr_failed += run_daos_reintegration_test(rank, size,
+								sub_tests,
+								sub_tests_size);
+			break;
 		default:
 			D_ASSERT(0);
 		}
@@ -202,6 +211,7 @@ main(int argc, char **argv)
 		{"oid_alloc",	no_argument,		NULL,	'O'},
 		{"degraded",	no_argument,		NULL,	'd'},
 		{"rebuild",	no_argument,		NULL,	'r'},
+		{"reintegration", no_argument,		NULL,	't'},
 		{"group",	required_argument,	NULL,	'g'},
 		{"svcn",	required_argument,	NULL,	's'},
 		{"subtests",	required_argument,	NULL,	'u'},
@@ -219,7 +229,7 @@ main(int argc, char **argv)
 
 	memset(tests, 0, sizeof(tests));
 
-	while ((opt = getopt_long(argc, argv, "ampcCdixAeoROg:s:u:E:w:W:hr",
+	while ((opt = getopt_long(argc, argv, "ampcCdixAeoROg:s:u:E:w:W:hrt",
 				  long_options, &index)) != -1) {
 		if (strchr(all_tests_defined, opt) != NULL) {
 			tests[ntests] = opt;

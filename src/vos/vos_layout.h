@@ -172,6 +172,56 @@ enum vos_dtx_entry_flags {
 	DTX_EF_LEADER			= (1 << 2),
 };
 
+struct vos_dtx_value_entry_df {
+	/** Size of value */
+	uint64_t	ve_size;
+	/** Type of value */
+	uint64_t	ve_type;
+	/** Next value entry */
+	umem_off_t	ve_next;
+	/** Previous value entry */
+	umem_off_t	ve_prev;
+	/** value record */
+	umem_off_t	ve_record;
+	/** Recx for array value */
+	daos_recx_t	ve_recx[0];
+};
+
+struct vos_dtx_key_entry_df {
+	/** Not sure if this is necessary if we have actual key from record */
+	uint64_t			ke_key_hash;
+	/** Next key entry */
+	umem_off_t			ke_next;
+	/** Previous key entry */
+	umem_off_t			ke_prev;
+	/** key record */
+	umem_off_t			ke_record;
+	union {
+		/** Embedded akey entry and head of list */
+		struct vos_key_entry_df		ke_akey;
+		/** Embedded value record and head of list */
+		struct vos_value_entry_df	ke_value;
+	}
+};
+
+struct vos_dtx_obj_entry_df {
+	/** The identifier of the modified object (shard). */
+	daos_unit_oid_t			oe_oid;
+	/** Next object entry */
+	umem_off_t			oe_next;
+	/** Previous object entry */
+	umem_off_t			oe_prev;
+	/** object record */
+	umem_off_t			oe_record;
+	/** Embedded dkey entry and head of list */
+	struct vos_key_entry_df		oe_dkey;
+};
+
+/** Not really creating a v2...just here so this will compile */
+struct vos_dtx_entryv2_df {
+	/** The DTX identifier. */
+	struct dtx_id			te_xid;
+
 /**
  * Persisted DTX entry, it is referenced by btr_record::rec_off
  * of btree VOS_BTR_DTX_TABLE.

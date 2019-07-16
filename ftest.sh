@@ -124,10 +124,6 @@ if ${TEARDOWN_ONLY:-false}; then
     exit 0
 fi
 
-# let's output to a dir in the tree
-rm -rf src/tests/ftest/avocado ./*_results.xml
-mkdir -p src/tests/ftest/avocado/job-results
-
 trap 'set +e; cleanup' EXIT
 
 CLUSH_ARGS=($CLUSH_ARGS)
@@ -317,10 +313,6 @@ if ! ./launch.py -c -a -r -s -ts ${TEST_NODES} ${TEST_TAG_ARR[*]}; then
 else
     rc=0
 fi
-
-# Remove the latest avocado symlink directory to avoid inclusion in the
-# jenkins build artifacts
-unlink $DAOS_BASE/src/tests/ftest/avocado/job-results/latest
 
 # get stacktraces for the core files
 if ls core.*; then

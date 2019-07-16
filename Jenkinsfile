@@ -1171,7 +1171,12 @@ pipeline {
                                                test_tag=pr,-hw
                                            fi
                                            tnodes=$(echo $NODELIST | cut -d ',' -f 1-9)
-                                           ./ftest.sh "$test_tag" $tnodes''',
+                                           rm -rf src/tests/ftest/avocado ./*_results.xml
+                                           mkdir -p src/tests/ftest/avocado/job-results
+                                           ./ftest.sh "$test_tag" $tnodes
+                                           # Remove the latest avocado symlink directory to avoid inclusion in the
+                                           # jenkins build artifacts
+                                           unlink src/tests/ftest/avocado/job-results/latest''',
                                 junit_files: "src/tests/ftest/avocado/*/*/*.xml src/tests/ftest/*_results.xml",
                                 failure_artifacts: env.STAGE_NAME
                     }
@@ -1243,7 +1248,12 @@ pipeline {
                                                test_tag=pr,hw
                                            fi
                                            tnodes=$(echo $NODELIST | cut -d ',' -f 1-9)
-                                           ./ftest.sh "$test_tag" $tnodes''',
+                                           rm -rf src/tests/ftest/avocado ./*_results.xml
+                                           mkdir -p src/tests/ftest/avocado/job-results
+                                           ./ftest.sh "$test_tag" $tnodes
+                                           # Remove the latest avocado symlink directory to avoid inclusion in the
+                                           # jenkins build artifacts
+                                           unlink src/tests/ftest/avocado/job-results/latest''',
                                 junit_files: "src/tests/ftest/avocado/*/*/*.xml src/tests/ftest/*_results.xml",
                                 failure_artifacts: env.STAGE_NAME
                     }

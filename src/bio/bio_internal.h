@@ -127,7 +127,41 @@ struct bio_xs_context {
 	d_list_t		 bxc_io_ctxts;
 	struct spdk_bdev_desc	*bxc_desc; /* for io stat only, read-only */
 	uint64_t		 bxc_io_stat_age;
+	bool			 bxc_auxi;
 };
+
+struct bio_io_channel {
+	int			 bic_cnt;
+	struct spdk_io_channel	*bic_channels[2];
+};
+
+extern struct bio_io_channel	channel_table[BIO_XS_CNT_MAX];
+
+static inline void
+bio_set_io_channel(struct bio_xs_context *ctxt, int tgt_id)
+{
+	struct bio_io_channel	*channel = &channel_table[tgt_id];
+
+	D_ASSERTF(channel->bic_cnt >= 0 && channel->bic_cnt < 2,
+		  "channel count: %d", channel->bic_cnt);
+	channel->bic_channels[channel->bic_cnt] = ctxt->bxc_io_channel;
+	ctxt->bxc_auxi = (channel->bic_cnt > 0);
+	channel->bic_cnt++;
+}
+
+static inline struct spdk_io_channel *
+bio_get_io_channel(int tgt_id)
+{
+	struct bio_io_channel	*channel = &channel_table[tgt_id];
+
+	if (channel->bic_cnt == 1)
+		return channel->bic_channels[0];
+	else if (channel->bic_cnt == 2)
+		return channel->bic_channels[rand() % 2];
+
+	D_ASSERTF(0, "Invalid channel count %d\n", channel->bic_cnt);
+	return NULL;
+}
 
 /* Per VOS instance I/O context */
 struct bio_io_context {

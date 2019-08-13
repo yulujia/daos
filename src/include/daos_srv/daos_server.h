@@ -186,6 +186,7 @@ struct dss_xstream {
 	int		dx_ctx_id;
 	bool		dx_main_xs;	/* true for main XS */
 	bool		dx_comm;	/* true with cart context */
+	bool		dx_nvme;
 };
 
 struct dss_module_info {

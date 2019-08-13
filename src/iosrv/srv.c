@@ -408,7 +408,7 @@ dss_srv_handler(void *arg)
 	}
 
 	/* Initialize NVMe context for main XS which accesses NVME */
-	if (dx->dx_main_xs) {
+	if (dx->dx_nvme) {
 		rc = bio_xsctxt_alloc(&dmi->dmi_nvme_ctxt, dmi->dmi_tgt_id);
 		if (rc != 0) {
 			D_ERROR("failed to init spdk context for xstream(%d) "
@@ -449,7 +449,7 @@ dss_srv_handler(void *arg)
 			}
 		}
 
-		if (dx->dx_main_xs)
+		if (dx->dx_nvme)
 			bio_nvme_poll(dmi->dmi_nvme_ctxt);
 
 		rc = ABT_future_test(dx->dx_shutdown, &state);
@@ -566,6 +566,7 @@ dss_start_one_xstream(hwloc_cpuset_t cpus, int xs_id)
 	ABT_thread_attr		attr = ABT_THREAD_ATTR_NULL;
 	int			rc = 0;
 	bool			comm; /* true to create cart ctx for RPC */
+	bool			nvme;
 	int			xs_offset;
 	int			i;
 
@@ -599,6 +600,7 @@ dss_start_one_xstream(hwloc_cpuset_t cpus, int xs_id)
 	 */
 	xs_offset = xs_id < dss_sys_xs_nr ? -1 : DSS_XS_OFFSET_IN_TGT(xs_id);
 	comm = (xs_id < dss_sys_xs_nr) || xs_offset == 0 || xs_offset == 1;
+	nvme = (xs_offset == 0 || xs_offset == 1);
 	dx->dx_tgt_id	= dss_xs2tgt(xs_id);
 	if (xs_id < dss_sys_xs_nr) {
 		snprintf(dx->dx_name, DSS_XS_NAME_LEN, DSS_SYS_XS_NAME_FMT,
@@ -610,6 +612,7 @@ dss_start_one_xstream(hwloc_cpuset_t cpus, int xs_id)
 	dx->dx_xs_id	= xs_id;
 	dx->dx_ctx_id	= -1;
 	dx->dx_comm	= comm;
+	dx->dx_nvme	= nvme;
 	dx->dx_main_xs	= xs_id >= dss_sys_xs_nr && xs_offset == 0;
 
 	rc = dss_sched_create(dx->dx_pools, DSS_POOL_CNT, &dx->dx_sched);

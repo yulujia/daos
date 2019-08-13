@@ -655,14 +655,42 @@ skip_media_error:
 	ABT_mutex_unlock(biod->bd_mutex);
 }
 
+struct blob_io_msg {
+	struct spdk_blob	*bim_blob;
+	struct spdk_io_channel	*bim_channel;
+	void			*bim_payload;
+	uint64_t		 bim_idx;
+	uint64_t		 bim_cnt;
+	struct bio_desc		*bim_biod;
+};
+
+static void
+blob_rw(void *ctxt)
+{
+	struct blob_io_msg	*msg = (struct blob_io_msg *)ctxt;
+
+	if (msg->bim_biod->bd_update)
+		spdk_blob_io_write(msg->bim_blob, msg->bim_channel,
+				   msg->bim_payload, msg->bim_idx,
+				   msg->bim_cnt, rw_completion,
+				   msg->bim_biod);
+	else
+		spdk_blob_io_read(msg->bim_blob, msg->bim_channel,
+				  msg->bim_payload, msg->bim_idx,
+				  msg->bim_cnt, rw_completion,
+				  msg->bim_biod);
+}
+
 static void
 dma_rw(struct bio_desc *biod, bool prep)
 {
+	struct spdk_thread	*thread;
 	struct spdk_io_channel	*channel;
 	struct spdk_blob	*blob;
 	struct bio_rsrvd_dma	*rsrvd_dma = &biod->bd_rsrvd;
 	struct bio_rsrvd_region	*rg;
 	struct bio_xs_context	*xs_ctxt;
+	struct blob_io_msg	*msgs;
 	uint64_t		 pg_idx, pg_cnt, pg_end;
 	void			*payload, *pg_rmw = NULL;
 	bool			 rmw_read = (prep && biod->bd_update);
@@ -672,7 +700,7 @@ dma_rw(struct bio_desc *biod, bool prep)
 	D_ASSERT(biod->bd_ctxt->bic_xs_ctxt);
 	xs_ctxt = biod->bd_ctxt->bic_xs_ctxt;
 	blob = biod->bd_ctxt->bic_blob;
-	channel = xs_ctxt->bxc_io_channel;
+	channel = bio_get_io_channel(xs_ctxt->bxc_xs_id);
 
 	biod->bd_inflights = 0;
 	biod->bd_dma_issued = 0;
@@ -686,6 +714,12 @@ dma_rw(struct bio_desc *biod, bool prep)
 		D_ERROR("Blobstore is invalid. blob:%p, closing:%d\n",
 			blob, biod->bd_ctxt->bic_closing);
 		biod->bd_result = -DER_NO_HDL;
+		return;
+	}
+
+	D_ALLOC_ARRAY(msgs, rsrvd_dma->brd_rg_cnt);
+	if (msgs == NULL) {
+		biod->bd_result = -DER_NOMEM;
 		return;
 	}
 
@@ -718,14 +752,19 @@ dma_rw(struct bio_desc *biod, bool prep)
 				biod->bd_update ? "Write" : "Read",
 				blob, payload, pg_idx, pg_cnt);
 
-			if (biod->bd_update)
-				spdk_blob_io_write(blob, channel, payload,
-						   pg_idx, pg_cnt,
-						   rw_completion, biod);
+			msgs[i].bim_blob	= blob;
+			msgs[i].bim_channel	= channel;
+			msgs[i].bim_payload	= payload;
+			msgs[i].bim_idx		= pg_idx;
+			msgs[i].bim_cnt		= pg_cnt;
+			msgs[i].bim_biod	= biod;
+
+			thread = spdk_io_channel_get_thread(channel);
+			if (xs_ctxt->bxc_thread == thread)
+				blob_rw(&msgs[i]);
 			else
-				spdk_blob_io_read(blob, channel, payload,
-						  pg_idx, pg_cnt,
-						  rw_completion, biod);
+				spdk_thread_send_msg(thread, blob_rw, &msgs[i]);
+
 			continue;
 		}
 
@@ -771,6 +810,7 @@ dma_rw(struct bio_desc *biod, bool prep)
 	}
 
 	biod->bd_ctxt->bic_inflight_dmas--;
+	D_FREE(msgs);
 	D_DEBUG(DB_IO, "DMA done, blob:%p, update:%d, rmw:%d\n",
 		blob, biod->bd_update, rmw_read);
 }

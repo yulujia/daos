@@ -192,8 +192,8 @@ which will return its rebuild status to client as well.
 struct daos_rebuild_status {
         /** pool map version in rebuilding or last completed rebuild */
         uint32_t                rs_version;
-        /** padding bytes */
-        uint32_t                rs_pad_32;
+	/** Time (Seconds) for the rebuild */
+        uint32_t                rs_seconds;
         /** errno for rebuild failure */
         int32_t                 rs_errno;
         /**

@@ -839,7 +839,18 @@ ds_cont_tgt_open(uuid_t pool_uuid, uuid_t cont_hdl_uuid,
 		DP_UUID(pool_uuid), DP_UUID(cont_uuid), DP_UUID(cont_hdl_uuid));
 
 	rc = dss_thread_collective(cont_open_one, &arg, 0);
-	D_ASSERTF(rc == 0, "%d\n", rc);
+	if (rc != 0) {
+		/* Once it exclude the target from the pool, since the target
+		 * might still in the cart group, so IV cont open might still
+		 * come to this target, especially if cont open/close will be
+		 * done by IV asynchronously, so this cont_open_one might return
+		 * -DER_NO_HDL if it can not find pool handle. (DAOS-3185)
+		 */
+		D_ERROR("open "DF_UUID"/"DF_UUID"/"DF_UUID":%d\n",
+			DP_UUID(pool_uuid), DP_UUID(cont_uuid),
+			DP_UUID(cont_hdl_uuid), rc);
+		return rc;
+	}
 
 	pool = ds_pool_lookup(pool_uuid);
 	D_ASSERT(pool != NULL);

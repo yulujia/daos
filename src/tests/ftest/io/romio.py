@@ -27,7 +27,6 @@ import os
 import sys
 import json
 from avocado import Test
-from apricot import skipForTicket
 
 sys.path.append('./util')
 sys.path.append('../util')
@@ -96,7 +95,6 @@ class Romio(Test):
             agent_utils.stop_agent(self.agent_sessions, self.hostlist_clients)
         server_utils.stop_server(hosts=self.hostlist_servers)
 
-    @skipForTicket("CORCI-635")
     def test_romio(self):
         """
         Test ID: DAOS-1994

@@ -28,7 +28,7 @@ import uuid
 
 from avocado.utils.process import run, CmdError
 from command_utils import FormattedParameter, CommandWithParameters
-
+from general_utils import exports_cmd
 
 class IorFailed(Exception):
     """Raise if Ior failed."""
@@ -262,8 +262,7 @@ class IorCommand(CommandWithParameters):
                 "IOR_HINT__MPI__romio_daos_obj_class":
                 self.daos_oclass.value
             })
-            assign_env = ["{}={}".format(key, val) for key, val in env.items()]
-            exports = "export {}; ".format("; export ".join(assign_env))
+            exports = exports_cmd(env)
             args = [
                 "-np {}".format(processes),
                 "-hostfile {}".format(hostfile),

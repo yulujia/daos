@@ -28,6 +28,7 @@ import uuid
 
 from avocado.utils.process import run, CmdError
 from command_utils import FormattedParameter, CommandWithParameters
+from general_utils import exports_cmd
 
 class MdtestFailed(Exception):
     """Raise if mdtest failed"""
@@ -206,8 +207,7 @@ class MdtestCommand(CommandWithParameters):
                 "DAOS_SVCL": self.dfs_svcl.value,
                 "FI_PSM2_DISCONNECT": 1,
             })
-            assign_env = ["{}={}".format(key, val) for key, val in env.items()]
-            exports = "export {}; ".format("; export ".join(assign_env))
+            exports = exports_cmd(env)
             args = [
                 "-np {}".format(processes),
                 "-hostfile {}".format(hostfile),

@@ -27,6 +27,7 @@ import os
 import subprocess
 import paramiko
 import socket
+from general_utils import exports_cmd
 
 class MpioFailed(Exception):
     """Raise if MPIO failed"""
@@ -70,14 +71,15 @@ class MpioUtils():
         """
 
         # environment variables only to be set on client node
-        env_variables = ["export CRT_ATTACH_INFO_PATH={}/install/tmp/" \
-                             .format(basepath),
-                         "export MPI_LIB=''", "export DAOS_SINGLETON_CLI=1"]
+        env = {
+            "CRT_ATTACH_INFO_PATH": "{}/install/tmp/".format(basepath),
+            "MPI_LIB": "\"\"",
+            "DAOS_SINGLETON_CLI": 1,
+        }
 
         # setting attributes
-        cd_cmd = 'cd ' + romio_test_repo
-        test_cmd = './runtests -fname=daos:test1 -subset -daos'
-        run_cmd = cd_cmd + ' && ' + test_cmd
+        run_cmd = exports_cmd(env) + 'cd ' + romio_test_repo + ' && ' + \
+                  './runtests -fname=daos:test1 -subset -daos'
         print("Romio test run command: {}".format(run_cmd))
 
         try:
@@ -88,13 +90,7 @@ class MpioUtils():
             ssh.load_system_host_keys()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             ssh.connect(hostlist[0])
-            _ssh_stdin, ssh_stdout, ssh_stderr = (
-                ssh.exec_command(env_variables[0] + " && " +
-                                 env_variables[1] + " && " +
-                                 env_variables[2] + " && " +
-                                 env_variables[3] + " && " +
-                                 env_variables[4] + " && " +
-                                 run_cmd))
+            _ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(run_cmd)
             print(ssh_stdout.read())
             print(ssh_stderr.read())
         except (IOError, OSError, paramiko.SSHException, socket.error) as excep:

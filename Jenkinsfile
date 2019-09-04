@@ -207,7 +207,6 @@ pipeline {
                         allOf {
                             not { branch 'weekly-testing' }
                             expression { env.CHANGE_TARGET != 'weekly-testing' }
-                            expression { return env.QUICKBUILD == '1' }
                         }
                     }
                     agent {

@@ -111,44 +111,41 @@ class MpioUtils():
         """
         print("self.mpichinstall: {}".format(self.mpichinstall))
         # environment variables only to be set on client node
-        env_variables = {"CRT_ATTACH_INFO_PATH": "{}/install/tmp/"\
-                             .format(basepath),
-                         "MPI_LIB": '',
-                         "MPIO_USER_PATH": "daos:",
-                         "DAOS_POOL": "{}".format(pool_uuid),
-                         "DAOS_SVCL": "{}".format(0),
-                         "HDF5_PARAPREFIX": "daos:"}
+        env = {
+            "CRT_ATTACH_INFO_PATH": "{}/install/tmp/"\
+                .format(basepath),
+            "MPI_LIB": '',
+            "MPIO_USER_PATH": "daos:",
+            "DAOS_POOL": "{}".format(pool_uuid),
+            "DAOS_SVCL": "{}".format(0),
+            "HDF5_PARAPREFIX": "daos:"
+        }
         # setting attributes
-        cd_cmd = 'cd ' + test_repo
+        cmd = exports_cmd(env) + 'cd ' + test_repo + ' && '
         # running 8 client processes
         if test_name == "llnl" and os.path.isfile(test_repo + "/testmpio_daos"):
-            test_cmd = "mpirun -np {} --hostfile {} ./testmpio_daos 1"\
-                           .format(client_processes, hostfile)
-        elif test_name == "mpi4py" and os.path.isfile(test_repo +
-                                                      "/test_io_daos.py"):
-            test_cmd = "mpiexec -n {} --hostfile {} python test_io_daos.py"\
-                           .format(client_processes, hostfile)
-        elif test_name == "hdf5" and (os.path.isfile(test_repo + "/testphdf5")
-                                      and os.path.isfile(test_repo
-                                                         + "/t_shapesame")):
-            test_cmd = ("echo ***Running testhdf5*** ;" +
-                        " mpirun -np {} --hostfile {} ./testphdf5 ;"\
-                        .format(client_processes, hostfile) +
-                        "echo ***Running t_shapesame*** ;" +
-                        "mpirun -np {} --hostfile {} ./t_shapesame"\
-                        .format(client_processes, hostfile))
+            cmd += "mpirun -np {} --hostfile {} ./testmpio_daos 1".format(
+                client_processes, hostfile)
+        elif test_name == "mpi4py" and \
+             os.path.isfile(test_repo + "/test_io_daos.py"):
+            cmd += "mpiexec -n {} --hostfile {} " \
+                  "python test_io_daos.py".format(client_processes, hostfile)
+        elif test_name == "hdf5" and \
+             (os.path.isfile(test_repo + "/testphdf5") and
+              os.path.isfile(test_repo + "/t_shapesame")):
+            cmd += ("echo ***Running testhdf5*** ;" +
+                    " mpirun -np {} --hostfile {} ./testphdf5 ;".format(
+                    client_processes, hostfile) +
+                    "echo ***Running t_shapesame*** ;" +
+                    "mpirun -np {} --hostfile {} ./t_shapesame".format(
+                        client_processes, hostfile))
         else:
             raise MpioFailed("Wrong test name or test repo location specified")
 
-        # final run command
-        run_cmd = ";".join([cd_cmd, ";".join(["export {}={}".format(key, val)
-                                              for key, val in
-                                              env_variables.items()]),
-                            test_cmd])
-        print("run command: {}".format(run_cmd))
+        print("run command: {}".format(cmd))
 
         try:
-            process = subprocess.Popen(run_cmd, stdout=subprocess.PIPE,
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                        stderr=subprocess.STDOUT, shell=True)
             while True:
                 output = process.stdout.readline()

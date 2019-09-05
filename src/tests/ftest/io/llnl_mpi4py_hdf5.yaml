@@ -18,9 +18,7 @@ pool:
         svcn: 1
 client_processes:
     np: 8
-# below mentioned path should be replaced by path of
-# LLNL and Mpi4py test suite directory in CI nodes when available.
 test_repo:
-    llnl: "/home/standan/mpiio/Testmpio"
+    llnl: "/usr/lib64/testmpio"
     mpi4py: "/home/standan/mpiio/mpi4py_latest/test"
     hdf5: "/home/standan/mpiio/hdf5/build/testpar"

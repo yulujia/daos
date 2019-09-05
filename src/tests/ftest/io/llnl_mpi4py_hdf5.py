@@ -107,7 +107,6 @@ class LlnlMpi4pyHdf5(TestWithServers):
         except (MpioFailed, DaosApiError) as excep:
             self.fail("<{0} Test Failed> \n{1}".format(test_name, excep))
 
-    @skipForTicket("CORCI-635")
     def test_llnl(self):
         """
         Jira ID: DAOS-2231

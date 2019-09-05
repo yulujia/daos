@@ -61,7 +61,7 @@ class LlnlMpi4pyHdf5(TestWithServers):
                              createsize, createsetid, None, None,
                              self.createsvc)
         except (DaosApiError) as excep:
-            self.fail("<Test Failed at pool create> \n{1}".format(excep))
+            self.fail("<Test Failed at pool create> \n{}".format(excep))
 
     def run_test(self, test_repo, test_name):
         """
@@ -119,7 +119,7 @@ class LlnlMpi4pyHdf5(TestWithServers):
         test_nb_collective, test_nb_localpointer, test_nb_rdwr,
         test_nb_readwrite, test_rdwr, test_readwrite
 
-        :avocado: tags=all,mpiio,smoke,pr,small,llnlmpi4py
+        :avocado: tags=all,mpiio,smoke,pr,small,llnl
         """
         test_repo = self.params.get("llnl", '/run/test_repo/')
         self.run_test(test_repo, "llnl")
@@ -136,7 +136,7 @@ class LlnlMpi4pyHdf5(TestWithServers):
         testReadWriteAtAllBeginEnd, testReadWriteAll
         testIReadIWriteAll, testReadWriteAllBeginEnd
 
-        :avocado: tags=all,mpiio,pr,small,llnlmpi4py,mpi4py
+        :avocado: tags=all,mpiio,pr,small,mpi4py
         """
         test_repo = self.params.get("mpi4py", '/run/test_repo/')
         self.run_test(test_repo, "mpi4py")

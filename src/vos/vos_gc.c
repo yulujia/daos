@@ -807,38 +807,42 @@ gc_wait(void)
 #endif
 }
 
-/**
- * Function for VOS standalone mode, it reclaims all the delete items for @pool
- */
-void
-gc_wait_pool(struct vos_pool *pool)
+/** public API to reclaim space for a opened pool */
+int
+vos_gc_pool(daos_handle_t poh, int *credits)
 {
-#if VOS_STANDALONE
-	int total = 0;
+	struct vos_pool *pool = vos_hdl2pool(poh);
+	int		 total;
 
+	if (!pool)
+		return -DER_NO_HDL;
+
+	if (!credits || *credits <= 0)
+		return -DER_INVAL;
+
+	total = 0;
 	while (1) {
-		int	creds = GC_CREDS_PRIV;
 		int	rc;
 		bool	empty;
 
 		if (d_list_empty(&pool->vp_gc_link)) {
-			D_DEBUG(DB_IO, "Nothing to reclaim for this pool\n");
-			return;
+			D_DEBUG(DB_TRACE, "Nothing to reclaim for this pool\n");
+			return 0;
 		}
 
-		total += creds;
-		rc = gc_reclaim_pool(pool, &creds, &empty);
+		total += *credits;
+		rc = gc_reclaim_pool(pool, credits, &empty);
 		if (rc) {
 			D_CRIT("GC failed %s\n", d_errstr(rc));
-			return;
+			return 0; /* caller can't do anything for it */
 		}
+		total -= *credits; /* substract the remained credits */
 
-		if (creds != 0) {
+		if (*credits != 0) {
 			D_ASSERT(empty);
-			D_DEBUG(DB_IO, "Consumed %d credits\n", total - creds);
+			D_DEBUG(DB_TRACE, "Consumed %d credits\n", total);
 			gc_log_pool(pool);
-			return;
+			return 0;
 		}
 	}
-#endif
 }

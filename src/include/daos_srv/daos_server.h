@@ -600,6 +600,9 @@ bool dss_pmixless(void);
 /* default credits */
 #define	DSS_GC_CREDS	256
 
-void dss_gc_run(int credits);
+/**
+ * Run GC for an opened pool, it run GC for all pools if @poh is DAOS_HDL_INVAL
+ */
+void dss_gc_run(daos_handle_t poh, int credits);
 
 #endif /* __DSS_API_H__ */

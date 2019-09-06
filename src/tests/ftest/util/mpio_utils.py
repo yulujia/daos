@@ -133,12 +133,10 @@ class MpioUtils():
         elif test_name == "hdf5" and \
              (os.path.isfile(test_repo + "/testphdf5") and
               os.path.isfile(test_repo + "/t_shapesame")):
-            cmd += ("echo ***Running testhdf5*** ;" +
-                    " mpirun -np {} --hostfile {} ./testphdf5 ;".format(
-                    client_processes, hostfile) +
-                    "echo ***Running t_shapesame*** ;" +
-                    "mpirun -np {} --hostfile {} ./t_shapesame".format(
-                        client_processes, hostfile))
+            for test in ["testhdf5", "t_shapesame"]:
+                cmd += "echo ***Running {0}*** ;" \
+                       " mpirun -np {1} --hostfile {2} ./{0} ;".format(
+                           test, client_processes, hostfile)
         else:
             raise MpioFailed("Wrong test name or test repo location specified")
 

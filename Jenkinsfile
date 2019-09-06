@@ -43,10 +43,12 @@
 def arch = ""
 def sanitized_JOB_NAME = JOB_NAME.toLowerCase().replaceAll('/', '-').replaceAll('%2f', '-')
 
-def component_repos = "openpa libfabric pmix ompi mercury spdk isa-l fio dpdk protobuf-c fuse pmdk argobots raft cart@daos_devel1"
-def daos_repo = "daos@${env.BRANCH_NAME}:${env.BUILD_NUMBER}"
-def daos_repos = component_repos + ' ' + daos_repo
-def ior_repos = "mpich@PR-10 ior-hpc@daos"
+def component_repos  = "openpa libfabric pmix ompi mercury spdk isa-l fio dpdk protobuf-c fuse pmdk argobots raft cart@daos_devel1"
+def daos_repo        = "daos@${env.BRANCH_NAME}:${env.BUILD_NUMBER}"
+def daos_repos       = component_repos + ' ' + daos_repo
+def ior_repos        = "mpich@PR-10 ior-hpc@daos"
+def functional_repos = daos_repos + ' ' + ior_repos + ' romio@PR-1 testmpio@PR-1 hdf5@PR-2'
+def functional_rpms  = "ior-hpc mpich-autoload romio-tests hdf5-tests"
 
 def rpm_test_pre = '''if git show -s --format=%B | grep "^Skip-test: true"; then
                           exit 0
@@ -991,9 +993,8 @@ pipeline {
                         provisionNodes NODELIST: env.NODELIST,
                                        node_count: 9,
                                        snapshot: true,
-                                       inst_repos: daos_repos + ' ' + ior_repos +
-                                                   ' romio@PR-1 testmpio@PR-1',
-                                       inst_rpms: "ior-hpc mpich-autoload romio-tests"
+                                       inst_repos: functional_repos
+                                       inst_rpms: functional_rpms
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: '''test_tag=$(git show -s --format=%B | sed -ne "/^Test-tag:/s/^.*: *//p")
                                            if [ -z "$test_tag" ]; then

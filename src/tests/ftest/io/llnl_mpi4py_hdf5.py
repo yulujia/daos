@@ -124,7 +124,6 @@ class LlnlMpi4pyHdf5(TestWithServers):
         test_repo = self.params.get("llnl", '/run/test_repo/')
         self.run_test(test_repo, "llnl")
 
-    @skipForTicket("CORCI-635")
     def test_mpi4py(self):
         """
         Jira ID: DAOS-2231

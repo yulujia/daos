@@ -20,5 +20,5 @@ client_processes:
     np: 8
 test_repo:
     llnl: "/usr/lib64/testmpio"
-    mpi4py: "/home/standan/mpiio/mpi4py_latest/test"
+    mpi4py: "/usr/lib64/python2.7/site-packages/mpi4py/tests"
     hdf5: "/usr/lib64/hdf5/tests"

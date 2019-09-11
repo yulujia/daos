@@ -1156,6 +1156,14 @@ pipeline {
             }
             parallel {
                 stage('Functional') {
+                    when {
+                        beforeAgent true
+                        expression {
+                            sh script: 'git show -s --format=%B |' +
+                                       ' grep "^Skip-func-test: true"',
+                            returnStatus: true
+                        }
+                    }
                     agent {
                         label 'ci_vm9'
                     }
@@ -1221,6 +1229,14 @@ pipeline {
                     }
                 }
                 stage('Functional_Hardware') {
+                    when {
+                        beforeAgent true
+                        expression {
+                            sh script: 'git show -s --format=%B |' +
+                                       ' grep "^Skip-func-hw-test: true"',
+                            returnStatus: true
+                        }
+                    }
                     agent {
                         label 'ci_nvme9'
                     }
@@ -1243,6 +1259,91 @@ pipeline {
                                                test_tag=pr,hw
                                            fi
                                            tnodes=$(echo $NODELIST | cut -d ',' -f 1-9)
+                                           ./ftest.sh "$test_tag" $tnodes''',
+                                junit_files: "src/tests/ftest/avocado/*/*/*.xml src/tests/ftest/*_results.xml",
+                                failure_artifacts: env.STAGE_NAME
+                    }
+                    post {
+                        always {
+                            sh '''rm -rf src/tests/ftest/avocado/*/*/html/
+                                  if [ -n "$STAGE_NAME" ]; then
+                                      rm -rf "$STAGE_NAME/"
+                                      mkdir "$STAGE_NAME/"
+                                      # compress those potentially huge DAOS logs
+                                      if daos_logs=$(ls src/tests/ftest/avocado/job-results/*/daos_logs/*); then
+                                          lbzip2 $daos_logs
+                                      fi
+                                      arts="$arts$(ls *daos{,_agent}.log* 2>/dev/null)" && arts="$arts"$'\n'
+                                      arts="$arts$(ls -d src/tests/ftest/avocado/job-results/* 2>/dev/null)" && arts="$arts"$'\n'
+                                      arts="$arts$(ls src/tests/ftest/*.stacktrace 2>/dev/null || true)"
+                                      if [ -n "$arts" ]; then
+                                          mv $(echo $arts | tr '\n' ' ') "$STAGE_NAME/"
+                                      fi
+                                  else
+                                      echo "The STAGE_NAME environment variable is missing!"
+                                      false
+                                  fi'''
+                            archiveArtifacts artifacts: env.STAGE_NAME + '/**'
+                            junit env.STAGE_NAME + '/*/results.xml, src/tests/ftest/*_results.xml'
+                        }
+                        /* temporarily moved into runTest->stepResult due to JENKINS-39203
+                        success {
+                            githubNotify credentialsId: 'daos-jenkins-commit-status',
+                                         description: env.STAGE_NAME,
+                                         context: 'test/' + env.STAGE_NAME,
+                                         status: 'SUCCESS'
+                        }
+                        unstable {
+                            githubNotify credentialsId: 'daos-jenkins-commit-status',
+                                         description: env.STAGE_NAME,
+                                         context: 'test/' + env.STAGE_NAME,
+                                         status: 'FAILURE'
+                        }
+                        failure {
+                            githubNotify credentialsId: 'daos-jenkins-commit-status',
+                                         description: env.STAGE_NAME,
+                                         context: 'test/' + env.STAGE_NAME,
+                                         status: 'ERROR'
+                        }
+                        */
+                    }
+                }
+                stage('SOAK-VM') {
+                    when {
+                        beforeAgent true
+                        expression {
+                            sh script: 'git show -s --format=%B |' +
+                                       ' grep "^Skip-soak-vm-test: true"',
+                            returnStatus: true
+                        }
+                    }
+                    agent {
+                        label 'ci_vm9'
+                    }
+                    steps {
+                        provisionNodes NODELIST: env.NODELIST,
+                                       node_count: 9,
+                                       snapshot: true,
+                                       inst_repos: daos_repos + ' ' + ior_repos,
+                                       inst_rpms: 'ior-hpc mpich-autoload' +
+                                           ' python-pathlib' +
+                                           ' slurm slurm-example-configs' +
+                                           ' slurm-slurmctld slurm-slurmd'
+                        runTest stashes: [ 'CentOS-install',
+                                           'CentOS-build-vars' ],
+                                script: '''test_tag=$(git show -s --format=%B | sed -ne "/^Test-soak-vm-tag:/s/^.*: *//p")
+                                           if [ -z "$test_tag" ]; then
+                                               test_tag=soak_smoke,-pr,-hw
+                                           fi
+                                           tnodes=$(echo $NODELIST | cut -d ',' -f 1-9)
+                                           pushd src/tests/ftest
+                                           launch_py=$(sed -ne '1s/^#!//'p launch.py)
+                                           launch_py_vers=$($launch_py -c 'import sys; \
+print(\"{}.{}\".format(sys.version_info[0], sys.version_info[1]))')
+                                           export PYTHONPATH=./util:../../utils/py/:./util/apricot:\
+../../../install/lib/python\$launch_py_vers/site-packages
+                                           ./slurm_setup.py -c ${tnodes%%,*} -n ${tnodes} -s
+                                           popd
                                            ./ftest.sh "$test_tag" $tnodes''',
                                 junit_files: "src/tests/ftest/avocado/*/*/*.xml src/tests/ftest/*_results.xml",
                                 failure_artifacts: env.STAGE_NAME

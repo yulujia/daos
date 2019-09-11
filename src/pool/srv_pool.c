@@ -1580,8 +1580,7 @@ out:
 static int
 pool_connect_bcast(crt_context_t ctx, struct pool_svc *svc,
 		   const uuid_t pool_hdl, uint64_t capas,
-		   d_iov_t *global_ns, struct daos_pool_space *ps,
-		   crt_bulk_t map_buf_bulk)
+		   struct daos_pool_space *ps, crt_bulk_t map_buf_bulk)
 {
 	struct pool_tgt_connect_in     *in;
 	struct pool_tgt_connect_out    *out;
@@ -1605,9 +1604,6 @@ pool_connect_bcast(crt_context_t ctx, struct pool_svc *svc,
 	in->tci_capas = capas;
 	in->tci_map_version = pool_map_get_version(svc->ps_pool->sp_map);
 	in->tci_iv_ns_id = ds_iv_ns_id_get(svc->ps_pool->sp_iv_ns);
-	in->tci_iv_ctxt.iov_buf = global_ns->iov_buf;
-	in->tci_iv_ctxt.iov_buf_len = global_ns->iov_buf_len;
-	in->tci_iv_ctxt.iov_len = global_ns->iov_len;
 	in->tci_master_rank = rank;
 	if (ps != NULL)
 		in->tci_query_bits = DAOS_PO_QUERY_SPACE;
@@ -1746,7 +1742,6 @@ ds_pool_connect_handler(crt_rpc_t *rpc)
 	d_iov_t				key;
 	d_iov_t				value;
 	struct pool_hdl			hdl;
-	d_iov_t				iv_iov;
 	unsigned int			iv_ns_id;
 	uint32_t			nhandles;
 	int				skip_update = 0;
@@ -1772,12 +1767,8 @@ ds_pool_connect_handler(crt_rpc_t *rpc)
 	D_ASSERT(svc->ps_pool != NULL);
 	if (svc->ps_pool->sp_iv_ns == NULL) {
 		rc = ds_iv_ns_create(rpc->cr_ctx, svc->ps_pool->sp_uuid,
-				     NULL, &iv_ns_id, &iv_iov,
+				     svc->ps_pool->sp_group, &iv_ns_id,
 				     &svc->ps_pool->sp_iv_ns);
-		if (rc)
-			D_GOTO(out_svc, rc);
-	} else {
-		rc = ds_iv_global_ns_get(svc->ps_pool->sp_iv_ns, &iv_iov);
 		if (rc)
 			D_GOTO(out_svc, rc);
 	}
@@ -1902,10 +1893,9 @@ ds_pool_connect_handler(crt_rpc_t *rpc)
 	}
 
 	rc = pool_connect_bcast(rpc->cr_ctx, svc, in->pci_op.pi_hdl,
-		in->pci_capas, &iv_iov,
-		(in->pci_query_bits & DAOS_PO_QUERY_SPACE) ?
-		&out->pco_space : NULL,
-		CRT_BULK_NULL);
+				in->pci_capas,
+				(in->pci_query_bits & DAOS_PO_QUERY_SPACE) ?
+				&out->pco_space : NULL, CRT_BULK_NULL);
 	if (rc != 0) {
 		D_ERROR(DF_UUID": failed to connect to targets: %d\n",
 			DP_UUID(in->pci_op.pi_uuid), rc);
@@ -2806,10 +2796,10 @@ out:
 /* Try to create iv namespace for the pool */
 int
 ds_pool_iv_ns_update(struct ds_pool *pool, unsigned int master_rank,
-		     d_iov_t *iv_iov, unsigned int iv_ns_id)
+		     unsigned int iv_ns_id)
 {
 	return ds_iv_ns_update(pool->sp_uuid, master_rank, pool->sp_group,
-			       iv_iov, iv_ns_id, &pool->sp_iv_ns);
+			       iv_ns_id, &pool->sp_iv_ns);
 }
 
 int

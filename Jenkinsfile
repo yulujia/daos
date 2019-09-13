@@ -48,7 +48,7 @@ def daos_repo        = "daos@${env.BRANCH_NAME}:${env.BUILD_NUMBER}"
 def daos_repos       = component_repos + ' ' + daos_repo
 def ior_repos        = "mpich@PR-10 ior-hpc@daos"
 def functional_repos = daos_repos + ' ' + ior_repos + ' romio@PR-1 testmpio@PR-1 hdf5@PR-2 mpi4py@PR-2'
-def functional_rpms  = "ior-hpc mpich-autoload romio-tests hdf5-tests mpi4py-tests"
+def functional_rpms  = "ior-hpc mpich-autoload romio-tests testmpio hdf5-tests mpi4py-tests"
 
 def rpm_test_pre = '''if git show -s --format=%B | grep "^Skip-test: true"; then
                           exit 0

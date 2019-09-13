@@ -128,12 +128,13 @@ class MpioUtils():
                 client_processes, hostfile)
         elif test_name == "mpi4py" and \
              os.path.isfile(test_repo + "/test_io_daos.py"):
-            cmd += "mpiexec -n {} --hostfile {} " \
-                  "python test_io_daos.py".format(client_processes, hostfile)
+            cmd += "mpiexec -n {} --hostfile {} "   \
+                   "module load mpi/mpich-x86_64; " \
+                   "python test_io_daos.py".format(client_processes, hostfile)
         elif test_name == "hdf5" and \
              (os.path.isfile(test_repo + "/testphdf5") and
               os.path.isfile(test_repo + "/t_shapesame")):
-            for test in ["testhdf5", "t_shapesame"]:
+            for test in ["testphdf5", "t_shapesame"]:
                 cmd += "echo ***Running {0}*** ;" \
                        " mpirun -np {1} --hostfile {2} ./{0} ;".format(
                            test, client_processes, hostfile)

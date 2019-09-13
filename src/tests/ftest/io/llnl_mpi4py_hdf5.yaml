@@ -13,7 +13,7 @@ pool:
     createset:
         setname: daos_server
     createsize:
-        size: 12000000000
+        size: 1000000000
     createsvc:
         svcn: 1
 client_processes:

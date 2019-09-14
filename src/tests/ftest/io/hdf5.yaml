@@ -13,12 +13,10 @@ pool:
     createset:
         setname: daos_server
     createsize:
-        size: 1000000000
+        size: 25000000000
     createsvc:
         svcn: 1
 client_processes:
-    np: 8
+    np: 1
 test_repo:
-    llnl: "/usr/lib64/testmpio"
-    mpi4py: "/usr/lib64/python2.7/site-packages/mpi4py/tests"
     hdf5: "/usr/lib64/hdf5/tests"

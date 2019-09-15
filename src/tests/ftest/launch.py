@@ -737,8 +737,13 @@ def main():
     tag_filter, test_list = get_test_list(args.tags)
 
     # Verify at least one test was requested
-    if len(test_list) == 0:
+    if not test_list:
         print("ERROR: No tests or tags found via {}".format(args.tags))
+        print("PYTHONPATH: {}".format(os.environ.get("PYTHONPATH")))
+        print("tests:\n{}".format(
+            subprocess.check_output("avocado list --paginator off ./ | " \
+                                    "grep -e hdf5 -e llnl -e ior",
+                                    stderr=subprocess.STDOUT, shell=True)))
         exit(1)
 
     # Display a list of the tests matching the tags

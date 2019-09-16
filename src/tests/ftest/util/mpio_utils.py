@@ -139,7 +139,8 @@ class MpioUtils():
                        " mpirun -np {1} --hostfile {2} ./{0} ;".format(
                            test, client_processes, hostfile)
         else:
-            raise MpioFailed("Wrong test name or test repo location specified")
+            raise MpioFailed("Wrong test name ({}) or test repo location ({}) "
+                             "specified".format(test_name, test_repo))
 
         print("run command: {}".format(cmd))
 

@@ -1055,6 +1055,78 @@ pipeline {
                         */
                     }
                 }
+                stage('Functional_Hardware') {
+                    agent {
+                        label 'ci_nvme9'
+                    }
+                    steps {
+                        // First snapshot provision the VM at beginning of list
+                        provisionNodes NODELIST: env.NODELIST,
+                                       node_count: 1,
+                                       snapshot: true,
+                                       inst_repos: functional_repos,
+                                       inst_rpms: functional_rpms
+                        // Then just reboot the physical nodes
+                        provisionNodes NODELIST: env.NODELIST,
+                                       node_count: 9,
+                                       power_only: true,
+                                       inst_repos: daos_repos + ' ' + ior_repos,
+                                       inst_rpms: "ior-hpc mpich-autoload"
+                        runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
+                                script: '''test_tag=$(git show -s --format=%B | sed -ne "/^Test-tag-hw:/s/^.*: *//p")
+                                           if [ -z "$test_tag" ]; then
+                                               test_tag=pr,hw
+                                           fi
+                                           tnodes=$(echo $NODELIST | cut -d ',' -f 1-9)
+                                           rm -rf src/tests/ftest/avocado ./*_results.xml
+                                           mkdir -p src/tests/ftest/avocado/job-results
+                                           ./ftest.sh "$test_tag" $tnodes
+                                           # Remove the latest avocado symlink directory to avoid inclusion in the
+                                           # jenkins build artifacts
+                                           unlink src/tests/ftest/avocado/job-results/latest''',
+                                junit_files: "src/tests/ftest/avocado/*/*/*.xml src/tests/ftest/*_results.xml",
+                                failure_artifacts: "Functional"
+                    }
+                    post {
+                        always {
+                            sh '''rm -rf src/tests/ftest/avocado/*/*/html/
+                                  rm -rf Functional
+                                  mkdir Functional
+                                  # compress those potentially huge DAOS logs
+                                  if daos_logs=$(ls src/tests/ftest/avocado/job-results/*/daos_logs/*); then
+                                      lbzip2 $daos_logs
+                                  fi
+                                  arts="$arts$(ls *daos{,_agent}.log* 2>/dev/null)" && arts="$arts"$'\n'
+                                  arts="$arts$(ls -d src/tests/ftest/avocado/job-results/* 2>/dev/null)" && arts="$arts"$'\n'
+                                  arts="$arts$(ls src/tests/ftest/*.stacktrace 2>/dev/null || true)"
+                                  if [ -n "$arts" ]; then
+                                      mv $(echo $arts | tr '\n' ' ') Functional
+                                  fi'''
+                            archiveArtifacts artifacts: "Functional" + '/**'
+                            junit "Functional" + '/*/results.xml, src/tests/ftest/*_results.xml'
+                        }
+                        /* temporarily moved into runTest->stepResult due to JENKINS-39203
+                        success {
+                            githubNotify credentialsId: 'daos-jenkins-commit-status',
+                                         description: env.STAGE_NAME,
+                                         context: 'test/' + env.STAGE_NAME,
+                                         status: 'SUCCESS'
+                        }
+                        unstable {
+                            githubNotify credentialsId: 'daos-jenkins-commit-status',
+                                         description: env.STAGE_NAME,
+                                         context: 'test/' + env.STAGE_NAME,
+                                         status: 'FAILURE'
+                        }
+                        failure {
+                            githubNotify credentialsId: 'daos-jenkins-commit-status',
+                                         description: env.STAGE_NAME,
+                                         context: 'test/' + env.STAGE_NAME,
+                                         status: 'ERROR'
+                        }
+                        */
+                    }
+                }
             }
         }
     }

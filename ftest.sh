@@ -142,7 +142,7 @@ if [ \"\${HOSTNAME%%%%.*}\" != \"${nodes[0]}\" ]; then
     fi
 
     tmpfs_size=16777216
-    memsize=\"\$(sed -ne '/MemTotal:/s/.* \([0-9][0-9]*\) kB/\1/p'
+    memsize=\"\$(sed -ne '/MemTotal:/s/.* \([0-9][0-9]*\) kB/\1/p' \
                /proc/meminfo)\"
     if [ \$memsize -gt 32000000 ]; then
         # make it twice as big on the hardware cluster

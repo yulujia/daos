@@ -139,6 +139,13 @@ class MpioUtils():
                        " mpirun -np {1} --hostfile {2} ./{0} ;".format(
                            test, client_processes, hostfile)
         else:
+            try:
+                print(subprocess.check_output(["ls", "-l", test_repo, shell=False))
+            except:
+                try:
+                    print(subprocess.check_output(["ls", "-ld", test_repo, shell=False))
+                except:
+                    print(subprocess.check_output(["rpm", "-qa", shell=False))
             raise MpioFailed("Wrong test name ({}) or test repo location ({}) "
                              "specified".format(test_name, test_repo))
 

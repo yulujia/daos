@@ -29,6 +29,7 @@ package srv;
 message NotifyReadyReq {
 	string uri = 1;
 	uint32 nctxs = 2;
+	string drpcSrvSock = 3;
 }
 
 // NotifyReadyResp is nil.

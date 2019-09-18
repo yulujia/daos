@@ -75,8 +75,9 @@ def set_defaults(env):
               help='Preprocess selected files for profiling')
 
     env.Append(CCFLAGS=['-g', '-Wshadow', '-Wall', '-Wno-missing-braces',
-                        '-fpic', '-D_GNU_SOURCE', '-DD_LOG_V2'])
-    env.Append(CCFLAGS=['-O2', '-DDAOS_VERSION=\\"' + DAOS_VERSION + '\\"'])
+                        '-fpic', '-D_GNU_SOURCE', '-DD_LOG_V2',
+                        '-fsanitize=address', '-lasan'])
+    env.Append(CCFLAGS=['-O1', '-DDAOS_VERSION=\\"' + DAOS_VERSION + '\\"'])
     env.AppendIfSupported(CCFLAGS=DESIRED_FLAGS)
     if GetOption("preprocess"):
         #could refine this but for now, just assume these warnings are ok

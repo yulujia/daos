@@ -149,19 +149,19 @@ def scons():
     # hack to avoid building this library with cov compiler for the moment
     compiler = denv.get('COMPILER').lower()
     if compiler == "covc":
-        compiler = "gcc"
+        compiler = "gcc -lasan"
 
     nvmecontrol = denv.StaticLibrary(
         "nvme_control",
         join(gospdkpath, "src", "nvme_control.c"),
-        CC=compiler, LIBS=['spdk'])
+        CC=compiler, LIBS=['spdk', 'asan'])
 
     denv.Install(join(denv.subst("$PREFIX"), "lib"), nvmecontrol)
 
     # CGO shell env vars.
     denv.AppendENVPath(
         "CGO_LDFLAGS",
-        denv.subst("-L%s -L$SPDK_PREFIX/lib $_RPATH" % gopath))
+        denv.subst("-L%s -L$SPDK_PREFIX/lib $_RPATH -lasan" % gopath))
     denv.AppendENVPath(
         "CGO_CFLAGS",
         denv.subst("-I$SPDK_PREFIX/include"))

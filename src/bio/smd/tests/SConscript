@@ -6,7 +6,7 @@ def scons():
     Import('denv', 'prereqs')
 
     libraries = ['smd', 'pmemobj', 'cmocka', 'daos_common',
-                 'uuid', 'abt', 'gurt']
+                 'uuid', 'abt', 'gurt', 'asan']
 
     tenv = denv.Clone()
 

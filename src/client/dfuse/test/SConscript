@@ -44,7 +44,7 @@ def scons():
 
     # Set options which are used throughout the src.
     tenv = dfuse_env.Clone()
-    tenv.AppendUnique(CFLAGS=['-pthread'])
+    tenv.AppendUnique(CFLAGS=['-pthread', '-lasan'])
     tenv.AppendUnique(CPPDEFINES=['_GNU_SOURCE'])
     tenv.AppendUnique(CPPPATH=['..'])
     tenv.AppendUnique(CPPPATH='../il')
@@ -66,9 +66,9 @@ def scons():
     il_test += build_static_tests(lfenv)
 
     tenv.AppendUnique(OBJPREFIX='s_')
-    tenv.AppendUnique(LIBS=['ioil', 'daos'])
+    tenv.AppendUnique(LIBS=['ioil', 'daos', 'asan'])
     lfenv.AppendUnique(OBJPREFIX='s_')
-    lfenv.AppendUnique(LIBS=['ioil', 'daos'])
+    lfenv.AppendUnique(LIBS=['ioil', 'daos', 'asan'])
 
     for test in IOIL_TEST_SRC:
         il_test += tenv.Program(test)

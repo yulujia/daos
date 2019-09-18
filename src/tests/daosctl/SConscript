@@ -6,7 +6,7 @@ def scons():
     Import('env', 'prereqs')
 
     libs = ['daos', 'gurt', 'daos_common', 'mpi', 'uuid',
-            'cart', 'pmem', 'pmemobj', 'daos_tests']
+            'cart', 'pmem', 'pmemobj', 'daos_tests', 'asan']
     sources = ['daosctl.c', 'help.c', 'common_utils.c', 'test-pool.c',
                'pool-cmds.c', 'cont-cmds.c', 'io-cmds.c']
 

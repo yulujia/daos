@@ -12,7 +12,8 @@ def scons():
     test_tgt = denv.SharedObject('place_obj.c')
     pl_test = daos_build.program(denv, 'pl_map', test_tgt + common_tgts,
                                  LIBS=['daos', 'daos_common', 'gurt', 'cart',
-                                       'placement', 'uuid', 'pthread', 'isal'])
+                                       'placement', 'uuid', 'pthread', 'isal',
+                                       'asan'])
     denv.Install('$PREFIX/bin/', pl_test)
 
 if __name__ == "SCons.Script":

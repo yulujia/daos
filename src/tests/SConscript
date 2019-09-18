@@ -6,7 +6,7 @@ def scons():
     Import('env', 'prereqs')
 
     libs = ['daos', 'daos_common', 'gurt', 'cart',
-            'mpi', 'uuid', 'cmocka']
+            'mpi', 'uuid', 'cmocka', 'asan']
 
     denv = env.Clone()
 

@@ -11,7 +11,7 @@ def scons():
 
     denv = env.Clone()
 
-    denv.AppendUnique(LIBS=['isal'])
+    denv.AppendUnique(LIBS=['isal', 'asan'])
 
     # Common placement code
     common_tgts = denv.SharedObject(['pl_map.c', 'ring_map.c',

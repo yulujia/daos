@@ -69,7 +69,7 @@ def build_client_libs_shared(env):
     dfuse_lib = daos_build.library(ilenv, 'common/libdfuse', common)
 
     gen_script = daos_build.program(ilenv, 'il/gen_script', ['il/gen_script.c'],
-                                    LIBS=[])
+                                    LIBS=['asan'])
     script = ilenv.Command('il/check_ioil_syms', gen_script,
                            "$SOURCE -s $TARGET")
     env.Install('$PREFIX/TESTING/scripts', script)
@@ -111,10 +111,11 @@ def scons():
     # Set options which are used throughout the src.
     dfuse_env = env.Clone()
     dfuse_env.AppendUnique(CPPPATH=['.'])
-    dfuse_env.AppendUnique(CFLAGS=['-pthread', '-fvisibility=hidden'])
+    dfuse_env.AppendUnique(CFLAGS=['-pthread', '-fvisibility=hidden', '-lasan'])
     dfuse_env.AppendUnique(CPPDEFINES=['_GNU_SOURCE'])
 
-    dfuse_env.AppendUnique(LIBS=['pthread', 'daos', 'daos_common', 'uuid'])
+    dfuse_env.AppendUnique(LIBS=['pthread', 'daos', 'daos_common', 'uuid',
+        'asan'])
 
     libs = build_client_libs_shared(dfuse_env)
 

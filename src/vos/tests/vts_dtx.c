@@ -44,7 +44,7 @@ vts_dtx_cos(void **state, bool punch)
 
 	/* Insert a DTX into CoS cache. */
 	rc = vos_dtx_add_cos(args->ctx.tc_co_hdl, &args->oid, &xid,
-			     dkey_hash, DAOS_EPOCH_MAX - 1, punch, false);
+			     dkey_hash, DAOS_EPOCH_MAX - 1, 0, punch, false);
 	assert_int_equal(rc, 0);
 
 	/* Query the DTX with different @punch parameter will find nothing. */
@@ -99,7 +99,7 @@ dtx_3(void **state)
 		daos_dti_gen(&xid, false);
 
 		rc = vos_dtx_add_cos(args->ctx.tc_co_hdl, &args->oid, &xid,
-				     dkey_hash, DAOS_EPOCH_MAX - 1,
+				     dkey_hash, DAOS_EPOCH_MAX - 1, 0,
 				     i % 2 ? true : false, false);
 		assert_int_equal(rc, 0);
 	}
@@ -139,7 +139,7 @@ dtx_4(void **state)
 		dkey_hash = lrand48();
 
 		rc = vos_dtx_add_cos(args->ctx.tc_co_hdl, &args->oid, &xid[i],
-				     dkey_hash, DAOS_EPOCH_MAX - 1,
+				     dkey_hash, DAOS_EPOCH_MAX - 1, 0,
 				     i % 2 ? false : true, false);
 		assert_int_equal(rc, 0);
 	}
@@ -300,7 +300,7 @@ dtx_5(void **state)
 
 	/* Add former DTX into CoS cache. */
 	rc = vos_dtx_add_cos(args->ctx.tc_co_hdl, &args->oid, &xid,
-			     dkey_hash, epoch, false, false);
+			     dkey_hash, epoch, 0, false, false);
 	assert_int_equal(rc, 0);
 
 	vos_dtx_stat(args->ctx.tc_co_hdl, &stat);
@@ -791,7 +791,7 @@ dtx_16(void **state)
 
 	/* Insert a DTX into CoS cache. */
 	rc = vos_dtx_add_cos(args->ctx.tc_co_hdl, &args->oid, &xid,
-			     dkey_hash, epoch, false, false);
+			     dkey_hash, epoch, 0, false, false);
 	assert_int_equal(rc, 0);
 
 	/* Fetch again. */

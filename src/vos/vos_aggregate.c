@@ -468,7 +468,7 @@ prepare_segments(struct agg_merge_window *mw)
 	struct evt_entry_in	*ent_in;
 	struct evt_extent	 ext;
 	unsigned int		 i, seg_max;
-	bool			 hole, coalesce;
+	bool			 hole = false, coalesce;
 
 	/*
 	 * Allocate large enough segments array to hold all the coalesced

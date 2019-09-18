@@ -777,15 +777,15 @@ out:
 
 
 int
-dtx_batched_commit_register(struct ds_cont_hdl *hdl)
+dtx_batched_commit_register(struct ds_pool_child *pool,
+			    struct ds_cont_child *cont)
 {
-	struct ds_cont_child		*cont = hdl->sch_cont;
 	struct dtx_batched_commit_args	*dbca;
 	d_list_t			*head;
 
 	D_ASSERT(cont != NULL);
 
-	if (hdl->sch_dtx_registered)
+	if (cont->sc_dtx_registered)
 		return 0;
 
 	head = &dss_get_module_info()->dmi_dtx_batched_list;
@@ -801,21 +801,20 @@ dtx_batched_commit_register(struct ds_cont_hdl *hdl)
 
 	ds_cont_child_get(cont);
 	dbca->dbca_cont = cont;
-	dbca->dbca_pool = ds_pool_child_get(hdl->sch_pool);
+	dbca->dbca_pool = ds_pool_child_get(pool);
 	d_list_add_tail(&dbca->dbca_link, head);
 
 out:
 	cont->sc_closing = 0;
-	hdl->sch_dtx_registered = 1;
+	cont->sc_dtx_registered = 1;
 	dbca->dbca_shares++;
 
 	return 0;
 }
 
 void
-dtx_batched_commit_deregister(struct ds_cont_hdl *hdl)
+dtx_batched_commit_deregister(struct ds_cont_child *cont)
 {
-	struct ds_cont_child		*cont = hdl->sch_cont;
 	struct dtx_batched_commit_args	*dbca;
 	d_list_t			*head;
 	ABT_future			 future;
@@ -824,7 +823,7 @@ dtx_batched_commit_deregister(struct ds_cont_hdl *hdl)
 	if (cont == NULL)
 		return;
 
-	if (!hdl->sch_dtx_registered)
+	if (!cont->sc_dtx_registered)
 		return;
 
 	if (cont->sc_closing) {
@@ -880,7 +879,7 @@ wait:
 	}
 
 out:
-	hdl->sch_dtx_registered = 0;
+	cont->sc_dtx_registered = 0;
 }
 
 int

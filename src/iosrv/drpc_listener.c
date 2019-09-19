@@ -161,6 +161,7 @@ generate_socket_path(void)
 {
 	int rc;
 
+	/* TODO KJ: generate unique name based on pid */
 	rc = asprintf(&drpc_listener_socket_path, "%s/%s",
 			dss_socket_dir, listener_socket_name);
 	if (rc < 0) {

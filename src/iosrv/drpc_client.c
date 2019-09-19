@@ -51,6 +51,7 @@ notify_ready(void)
 	if (rc != 0)
 		goto out;
 	req.nctxs = DSS_CTX_NR_TOTAL;
+	/* TODO KJ: fill out with socket name */
 
 	reqb_size = srv__notify_ready_req__get_packed_size(&req);
 	D_ALLOC(reqb, reqb_size);

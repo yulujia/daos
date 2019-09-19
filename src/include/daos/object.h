@@ -362,6 +362,7 @@ int dc_obj_list_obj(tse_task_t *task);
 int dc_obj_fetch_md(daos_obj_id_t oid, struct daos_obj_md *md);
 int dc_obj_layout_get(daos_handle_t oh, struct daos_obj_layout **p_layout);
 int dc_obj_layout_refresh(daos_handle_t oh);
+int dc_obj_verify(daos_handle_t oh, daos_epoch_t *epochs, unsigned int nr);
 daos_handle_t dc_obj_hdl2cont_hdl(daos_handle_t oh);
 
 /** Decode shard number from enumeration anchor */
@@ -383,6 +384,54 @@ enum daos_io_flags {
 	DIOF_TO_LEADER		= 0x1,
 	/* The RPC will be sent to specified replica. */
 	DIOF_TO_SPEC_SHARD	= 0x2,
+	/* The operation (enumeration) has specified epoch. */
+	DIOF_WITH_SPEC_EPOCH	= 0x4,
+};
+
+static inline void
+daos_anchor_set_flags(daos_anchor_t *anchor, uint32_t flags)
+{
+	anchor->da_flags = flags;
+}
+
+static inline uint32_t
+daos_anchor_get_flags(daos_anchor_t *anchor)
+{
+	return anchor->da_flags;
+}
+
+static inline void
+daos_anchor_set_zero(daos_anchor_t *anchor)
+{
+	anchor->da_type = DAOS_ANCHOR_TYPE_ZERO;
+}
+
+static inline void
+daos_anchor_set_eof(daos_anchor_t *anchor)
+{
+	anchor->da_type = DAOS_ANCHOR_TYPE_EOF;
+}
+
+static inline bool
+daos_anchor_is_zero(daos_anchor_t *anchor)
+{
+	return anchor->da_type == DAOS_ANCHOR_TYPE_ZERO;
+}
+
+static inline bool
+daos_anchor_is_eof(daos_anchor_t *anchor)
+{
+	return anchor->da_type == DAOS_ANCHOR_TYPE_EOF;
+}
+
+#define RECX_INLINE	(1U << 0)
+
+struct obj_enum_rec {
+	daos_recx_t		rec_recx;
+	daos_epoch_range_t	rec_epr;
+	uint64_t		rec_size;
+	uint32_t		rec_version;
+	uint32_t		rec_flags;
 };
 
 #endif /* __DD_OBJ_H__ */

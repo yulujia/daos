@@ -28,6 +28,7 @@
 #include <sys/xattr.h>
 #include <daos/checksum.h>
 #include <daos/common.h>
+#include <daos/object.h>
 
 #include "daos.h"
 #include "daos_fs.h"

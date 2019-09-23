@@ -276,8 +276,9 @@ ds_bulk_transfer(crt_rpc_t *rpc, crt_bulk_op_t bulk_op, bool bulk_bind,
 			start = idx;
 			sgl_sent.sg_iovs = &sgl->sg_iovs[start];
 			/* Find the end of the non-empty record */
-			while (sgl->sg_iovs[idx].iov_buf != NULL &&
-			       idx < sgl->sg_nr_out) {
+			while (idx < sgl->sg_nr_out &&
+				sgl->sg_iovs[idx].iov_buf != NULL
+			       ) {
 				length += sgl->sg_iovs[idx].iov_len;
 				idx++;
 			}
